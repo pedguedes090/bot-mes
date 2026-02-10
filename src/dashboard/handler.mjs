@@ -293,8 +293,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <body>
 <div class="container">
   <div class="header">
-    <h1>\\u{1F916} Bot Admin Dashboard</h1>
-    <button class="refresh-btn" onclick="loadAll()">\\u21BB Refresh</button>
+    <h1>&#x1F916; Bot Admin Dashboard</h1>
+    <button class="refresh-btn" onclick="loadAll()">&#x21BB; Refresh</button>
   </div>
   <div id="error"></div>
 
@@ -313,7 +313,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <tbody id="threads-body"><tr><td colspan="5" style="color:#64748b">Loading...</td></tr></tbody>
   </table>
 
-  <h2>\\u2699\\uFE0F Environment Settings</h2>
+  <h2>&#x2699;&#xFE0F; Environment Settings</h2>
   <div class="env-form" id="env-form">
     <div style="color:#64748b">Loading...</div>
   </div>
@@ -325,6 +325,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
 <script>
 const API = window.location.origin;
+var HEAP_WARN_THRESHOLD = 0.85;
 
 function fmt(n) { return n != null ? n.toLocaleString() : '\\u2014'; }
 
@@ -366,7 +367,7 @@ async function loadOverview() {
     var data = await res.json();
     var kpis = document.getElementById('kpis');
     var errClass = (data.errors && data.errors.total > 0) ? 'warn' : 'ok';
-    var memClass = (data.memory && data.memory.heap_used > data.memory.heap_total * 0.85) ? 'warn' : 'ok';
+    var memClass = (data.memory && data.memory.heap_used > data.memory.heap_total * HEAP_WARN_THRESHOLD) ? 'warn' : 'ok';
     kpis.innerHTML =
       card('Uptime', formatUptime(data.uptime_seconds), 'ok') +
       card('Processed', fmt(data.events && data.events.processed), 'ok') +

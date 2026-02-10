@@ -1,6 +1,8 @@
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { existsSync, unlinkSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createDashboardHandler } from '../../src/dashboard/handler.mjs';
 
 // Minimal mock logger
@@ -74,11 +76,27 @@ function startTestServer(handler) {
 
 describe('Dashboard API', () => {
     let server;
+    const envFilePath = resolve(process.cwd(), '.env');
+    let envBackup = null;
+
+    beforeEach(() => {
+        if (existsSync(envFilePath)) {
+            envBackup = readFileSync(envFilePath, 'utf-8');
+        } else {
+            envBackup = null;
+        }
+    });
 
     afterEach(() => {
         if (server) {
             try { server.close(); } catch { /* ignore */ }
             server = null;
+        }
+        // Restore .env file to original state
+        if (envBackup !== null) {
+            writeFileSync(envFilePath, envBackup, 'utf-8');
+        } else if (existsSync(envFilePath)) {
+            unlinkSync(envFilePath);
         }
     });
 
@@ -278,6 +296,7 @@ describe('Dashboard API', () => {
         server = ctx.server;
 
         const originalLogLevel = process.env.LOG_LEVEL;
+        const originalSendRate = process.env.SEND_RATE_PER_SEC;
         try {
             const res = await fetch(`${ctx.base}/api/env`, {
                 method: 'POST',
@@ -292,9 +311,10 @@ describe('Dashboard API', () => {
             assert.strictEqual(process.env.LOG_LEVEL, 'debug');
             assert.strictEqual(process.env.SEND_RATE_PER_SEC, '10');
         } finally {
-            // Restore
             if (originalLogLevel !== undefined) process.env.LOG_LEVEL = originalLogLevel;
             else delete process.env.LOG_LEVEL;
+            if (originalSendRate !== undefined) process.env.SEND_RATE_PER_SEC = originalSendRate;
+            else delete process.env.SEND_RATE_PER_SEC;
         }
     });
 
@@ -304,15 +324,21 @@ describe('Dashboard API', () => {
         const ctx = await startTestServer(handler);
         server = ctx.server;
 
-        const res = await fetch(`${ctx.base}/api/env`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ FB_COOKIES: 'hacked', LOG_LEVEL: 'warn' }),
-        });
-        assert.strictEqual(res.status, 200);
-        const data = await res.json();
-        assert.ok(!data.applied.includes('FB_COOKIES'));
-        assert.ok(data.applied.includes('LOG_LEVEL'));
+        const originalLogLevel = process.env.LOG_LEVEL;
+        try {
+            const res = await fetch(`${ctx.base}/api/env`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ FB_COOKIES: 'hacked', LOG_LEVEL: 'warn' }),
+            });
+            assert.strictEqual(res.status, 200);
+            const data = await res.json();
+            assert.ok(!data.applied.includes('FB_COOKIES'));
+            assert.ok(data.applied.includes('LOG_LEVEL'));
+        } finally {
+            if (originalLogLevel !== undefined) process.env.LOG_LEVEL = originalLogLevel;
+            else delete process.env.LOG_LEVEL;
+        }
     });
 
     it('POST /api/env rejects invalid body', async () => {

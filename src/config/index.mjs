@@ -128,7 +128,8 @@ export function updateEnv(updates) {
     const safeUpdates = {};
     for (const [key, value] of Object.entries(updates)) {
         if (!EDITABLE_ENV_KEYS.includes(key)) continue;
-        const strVal = String(value);
+        // Sanitize: strip newlines/carriage returns to prevent .env corruption
+        const strVal = String(value).replace(/[\r\n]/g, '');
         safeUpdates[key] = strVal;
         process.env[key] = strVal;
         applied.push(key);
@@ -139,6 +140,13 @@ export function updateEnv(updates) {
     }
 
     return { applied };
+}
+
+function quoteEnvValue(val) {
+    if (val.includes(' ') || val.includes('"') || val.includes("'") || val.includes('#')) {
+        return '"' + val.replace(/"/g, '\\"') + '"';
+    }
+    return val;
 }
 
 /**
@@ -161,14 +169,14 @@ function persistEnvFile(updates) {
         if (eqIdx === -1) continue;
         const key = trimmed.slice(0, eqIdx).trim();
         if (key in remaining) {
-            lines[i] = `${key}=${remaining[key]}`;
+            lines[i] = `${key}=${quoteEnvValue(remaining[key])}`;
             delete remaining[key];
         }
     }
 
     // Append any new keys that weren't already in the file
     for (const [key, value] of Object.entries(remaining)) {
-        lines.push(`${key}=${value}`);
+        lines.push(`${key}=${quoteEnvValue(value)}`);
     }
 
     writeFileSync(ENV_FILE_PATH, lines.join('\n'), 'utf-8');
