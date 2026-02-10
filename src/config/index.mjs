@@ -35,6 +35,8 @@ const EDITABLE_ENV_KEYS = [
     'DB_PATH',
     'METRICS_PORT',
     'DEVICE_DATA_PATH',
+    'GEMINI_API_KEY',
+    'GEMINI_MODEL',
 ];
 
 function env(key, fallback) {
@@ -102,6 +104,8 @@ export function loadConfig() {
         metricsPort: envInt('METRICS_PORT', 9090),
         deviceDataPath: env('DEVICE_DATA_PATH', './device.json'),
         dbPath: env('DB_PATH', './bot.db'),
+        geminiApiKey: env('GEMINI_API_KEY', ''),
+        geminiModel: env('GEMINI_MODEL', 'gemini-2.0-flash'),
     });
 }
 

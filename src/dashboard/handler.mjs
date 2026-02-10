@@ -460,10 +460,13 @@ async function loadEnv() {
       form.innerHTML = '<div style="color:#64748b">No editable variables</div>';
       return;
     }
+    var SECRET_KEYS = ['GEMINI_API_KEY'];
     form.innerHTML = Object.keys(data.env).map(function(key) {
+      var inputType = SECRET_KEYS.indexOf(key) >= 0 ? 'password' : 'text';
       return '<div class="env-row">' +
         '<label for="env-' + esc(key) + '">' + esc(key) + '</label>' +
-        '<input type="text" id="env-' + esc(key) + '" data-env-key="' + esc(key) + '" value="' + esc(data.env[key]) + '">' +
+        '<input type="' + inputType + '" id="env-' + esc(key) + '" data-env-key="' + esc(key) + '" value="' + esc(data.env[key]) + '"' +
+        (inputType === 'password' ? ' autocomplete="off"' : '') + '>' +
         '</div>';
     }).join('');
     document.getElementById('env-status').textContent = '';
