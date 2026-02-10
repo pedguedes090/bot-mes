@@ -333,6 +333,19 @@ async function toggleBlock(userId, block) {
   } catch (e) { alert(e.message); }
 }
 
+async function toggleAdmin(userId, isAdmin) {
+  if (!confirm('Are you sure you want to ' + (isAdmin ? 'GRANT' : 'REVOKE') + ' admin rights for user ' + userId + '?')) return;
+  try {
+    var res = await fetch(API + '/api/users/' + userId + '/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin: isAdmin })
+    });
+    if (!res.ok) throw new Error('Action failed');
+    loadUsers(); 
+  } catch (e) { alert(e.message); }
+}
+
 async function loadUsers() {
   try {
     var res = await fetch(API + '/api/users?limit=50');
@@ -344,13 +357,17 @@ async function loadUsers() {
         ? '<button class="refresh-btn" style="color:#4ade80;border-color:#4ade80" onclick="toggleBlock(\\'' + u.id + '\\', false)">Unban</button>'
         : '<button class="refresh-btn" style="color:#f87171;border-color:#f87171" onclick="toggleBlock(\\'' + u.id + '\\', true)">Ban</button>';
       
+      var adminBtn = u.is_admin
+        ? '<button class="refresh-btn" style="color:#fbbf24;border-color:#fbbf24;margin-left:0.5rem" onclick="toggleAdmin(\\'' + u.id + '\\', false)">Demote</button>'
+        : '<button class="refresh-btn" style="color:#a78bfa;border-color:#a78bfa;margin-left:0.5rem" onclick="toggleAdmin(\\'' + u.id + '\\', true)">Promote</button>';
+
       return '<tr>' +
       '<td>' + esc(u.id) + '</td>' +
       '<td>' + esc(u.name || '\\u2014') + '</td>' +
       '<td>' + (u.is_admin ? '<span class="badge badge-admin">Admin</span>' : 'User') + '</td>' +
       '<td>' + (u.is_blocked ? '<span class="badge badge-blocked">Blocked</span>' : '<span class="badge badge-active">Active</span>') + '</td>' +
       '<td>' + esc(u.first_seen || '') + '</td>' +
-      '<td>' + actionBtn + '</td></tr>';
+      '<td>' + actionBtn + adminBtn + '</td></tr>';
     }).join('');
   } catch (e) { showError('Failed to load users: ' + e.message); }
 }
