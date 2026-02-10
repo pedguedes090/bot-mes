@@ -7,6 +7,7 @@ export class BotCore {
     #db;
     #activeHandlers = 0;
     #seenIds;
+    #seenIdx = 0;
     #shuttingDown = false;
 
     constructor(adapter, handlers, config, logger, metrics, db = null) {
@@ -16,8 +17,10 @@ export class BotCore {
         this.#logger = logger.child('core');
         this.#metrics = metrics;
         this.#db = db;
-        // LRU-style idempotency set (simple ring buffer)
-        this.#seenIds = new Set();
+        // Fixed-size ring buffer for idempotency deduplication
+        const cap = config.idempotencyCacheSize;
+        this.#seenIds = { set: new Set(), buf: new Array(cap), cap };
+        this.#seenIdx = 0;
     }
 
     start() {
@@ -52,19 +55,20 @@ export class BotCore {
             } catch { /* DB errors should not break dispatch */ }
         }
 
-        // Idempotency: skip duplicate message IDs
+        // Idempotency: skip duplicate message IDs (ring buffer)
         const msgId = msg.messageId || msg.id;
         if (msgId) {
-            if (this.#seenIds.has(msgId)) {
+            const cache = this.#seenIds;
+            if (cache.set.has(msgId)) {
                 this.#metrics.inc('events.deduplicated');
                 return;
             }
-            this.#seenIds.add(msgId);
-            // Evict oldest when exceeding cache size
-            if (this.#seenIds.size > this.#config.idempotencyCacheSize) {
-                const first = this.#seenIds.values().next().value;
-                this.#seenIds.delete(first);
-            }
+            // Evict oldest entry in ring buffer slot before inserting
+            const evicted = cache.buf[this.#seenIdx];
+            if (evicted !== undefined) cache.set.delete(evicted);
+            cache.buf[this.#seenIdx] = msgId;
+            cache.set.add(msgId);
+            this.#seenIdx = (this.#seenIdx + 1) % cache.cap;
         }
 
         // Backpressure: drop if too many in-flight
@@ -95,13 +99,20 @@ export class BotCore {
             try {
                 if (!handler.match(eventType, msg)) continue;
 
-                // Execute with timeout
+                // Execute with timeout; clear timer to avoid leaks
+                let timer;
+                const timeout = new Promise((_, reject) => {
+                    timer = setTimeout(() => reject(new Error(`Handler '${handler.name}' timed out`)), this.#config.handlerTimeoutMs);
+                });
+                // Swallow rejections from the handler promise after timeout wins the race
                 const result = Promise.resolve(handler.handle(eventType, msg, this.#adapter));
-                const timeout = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error(`Handler '${handler.name}' timed out`)), this.#config.handlerTimeoutMs)
-                );
+                result.catch(() => {});
 
-                await Promise.race([result, timeout]);
+                try {
+                    await Promise.race([result, timeout]);
+                } finally {
+                    clearTimeout(timer);
+                }
                 break; // First matching handler wins
             } catch (err) {
                 this.#metrics.inc('errors.handler');
@@ -128,17 +139,14 @@ export class BotCore {
         }
     }
     async #ensureUser(userId) {
-        // optimistically check cache/db first? 
-        // For now, DB check is fast enough.
         const user = this.#db.getUser(userId);
         if (user) {
-            // Already exists, just ensure last seen update (optional, ensureUser updates updated_at)
-            // If we want to update updated_at on every msg:
+            // Already exists — single UPSERT updates updated_at
             this.#db.ensureUser(userId);
             return;
         }
 
-        // New user: fetch info
+        // New user: fetch info from adapter
         try {
             const info = await this.#adapter.getUserInfo(userId);
             this.#db.ensureUser(userId, info.name, info.username, info.profilePictureUrl);
@@ -146,7 +154,6 @@ export class BotCore {
             this.#metrics.inc('users.registered');
         } catch (err) {
             this.#logger.warn('Failed to fetch user info', { userId, error: err.message });
-            // Register with placeholder
             this.#db.ensureUser(userId, `User ${userId}`);
         }
     }
