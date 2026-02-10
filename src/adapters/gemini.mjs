@@ -3,8 +3,6 @@
 //   1. Deciding whether the bot should reply (and if search is needed)
 //   2. Generating natural, gen-z style responses
 
-import { URL } from 'node:url';
-
 const DECISION_SYSTEM_PROMPT = `Bạn là bộ phận "gác cổng" của một chatbot Messenger.
 Nhiệm vụ: đọc đoạn chat gần đây rồi quyết định bot có nên trả lời không.
 
@@ -117,10 +115,7 @@ export class GeminiAdapter {
      */
     async #callAPI(systemPrompt, userPrompt) {
         const model = this.#model || 'gemini-2.0-flash';
-        const apiUrl = new URL(
-            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
-        );
-        apiUrl.searchParams.set('key', this.#apiKey);
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
         const body = {
             system_instruction: {
@@ -140,9 +135,12 @@ export class GeminiAdapter {
 
         this.#logger.debug('Calling Gemini API', { model });
 
-        const response = await fetch(apiUrl.toString(), {
+        const response = await fetch(apiUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': this.#apiKey,
+            },
             body: JSON.stringify(body),
         });
 
