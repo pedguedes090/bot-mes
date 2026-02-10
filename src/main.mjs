@@ -4,7 +4,8 @@ import { Metrics } from './observability/metrics.mjs';
 import { Database } from './adapters/database.mjs';
 import { MessengerAdapter } from './adapters/messenger.mjs';
 import { BotCore } from './bot/core.mjs';
-import { handlers } from './handlers/index.mjs';
+import { buildHandlers } from './handlers/index.mjs';
+import { createDashboardHandler } from './dashboard/handler.mjs';
 
 const config = loadConfig();
 const logger = new Logger('main', config.logLevel);
@@ -22,6 +23,13 @@ metrics.startServer(config.metricsPort, logger);
 
 // Init database
 const db = new Database(config.dbPath, logger);
+
+// Wire admin dashboard into metrics server
+const dashboardHandler = createDashboardHandler(db, metrics, logger);
+metrics.setDashboardHandler(dashboardHandler);
+
+// Build handlers with command system
+const { handlers } = buildHandlers(db, metrics);
 
 // Create adapter and bot core
 const adapter = new MessengerAdapter(config, logger, metrics);

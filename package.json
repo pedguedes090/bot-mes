@@ -7,7 +7,7 @@
     "main": "src/main.mjs",
     "scripts": {
         "start": "node --experimental-sqlite src/main.mjs",
-        "test": "node --test tests/"
+        "test": "node --test 'tests/**/*.mjs' 'tests/*.mjs'"
     },
     "engines": {
         "node": ">=22.12.0"

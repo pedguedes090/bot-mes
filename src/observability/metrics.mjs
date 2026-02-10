@@ -5,6 +5,7 @@ export class Metrics {
     #gauges = new Map();
     #server = null;
     #startTime = Date.now();
+    #dashboardHandler = null;
 
     inc(name, delta = 1) {
         this.#counters.set(name, (this.#counters.get(name) ?? 0) + delta);
@@ -26,9 +27,22 @@ export class Metrics {
         return out;
     }
 
-    // Minimal HTTP server for /health and /metrics
+    /**
+     * Set the dashboard handler for API routes.
+     * @param {(req: import('http').IncomingMessage, res: import('http').ServerResponse) => boolean} handler
+     */
+    setDashboardHandler(handler) {
+        this.#dashboardHandler = handler;
+    }
+
+    // Minimal HTTP server for /health, /metrics, /dashboard, and /api/*
     startServer(port, logger) {
         this.#server = createServer((req, res) => {
+            // Try dashboard handler first for /api/* and /dashboard routes
+            if (this.#dashboardHandler && this.#dashboardHandler(req, res)) {
+                return;
+            }
+
             if (req.url === '/health') {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ status: 'ok', uptime: Math.floor((Date.now() - this.#startTime) / 1000) }));

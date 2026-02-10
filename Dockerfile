@@ -23,4 +23,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
 
 ENV NODE_OPTIONS="--max-old-space-size=96"
 
-CMD ["node", "src/main.mjs"]
+CMD ["node", "--experimental-sqlite", "src/main.mjs"]
