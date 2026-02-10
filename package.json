@@ -1,0 +1,18 @@
+{
+    "name": "meta-messenger-bot",
+    "version": "1.0.0",
+    "type": "module",
+    "private": true,
+    "description": "Production-ready bot using meta-messenger.js",
+    "main": "src/main.mjs",
+    "scripts": {
+        "start": "node --experimental-sqlite src/main.mjs",
+        "test": "node --test tests/"
+    },
+    "engines": {
+        "node": ">=22.12.0"
+    },
+    "dependencies": {
+        "meta-messenger.js": "^1.1.1"
+    }
+}
