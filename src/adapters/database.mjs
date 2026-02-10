@@ -62,6 +62,8 @@ export class Database {
         this.#db.exec('PRAGMA journal_mode = WAL');    // Better concurrent read perf
         this.#db.exec('PRAGMA synchronous = NORMAL');  // Good balance safety/speed
         this.#db.exec('PRAGMA foreign_keys = ON');
+        this.#db.exec('PRAGMA cache_size = -2000');    // ~2MB page cache
+        this.#db.exec('PRAGMA temp_store = MEMORY');   // Temp tables in RAM
         this.#migrate();
         this.#prepareStatements();
         this.#logger.info('Database ready', { path: dbPath });
@@ -129,6 +131,28 @@ export class Database {
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value`
             ),
             getSetting: this.#db.prepare(`SELECT value FROM settings WHERE key = ?`),
+            // Previously ad-hoc statements — now prepared once
+            listThreads: this.#db.prepare(
+                `SELECT * FROM threads ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+            ),
+            listUsers: this.#db.prepare(
+                `SELECT * FROM users ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+            ),
+            setThreadPrefix: this.#db.prepare(
+                `UPDATE threads SET prefix = ?, updated_at = datetime('now') WHERE id = ?`
+            ),
+            setThreadEnabled: this.#db.prepare(
+                `UPDATE threads SET enabled = ?, updated_at = datetime('now') WHERE id = ?`
+            ),
+            setAdmin: this.#db.prepare(
+                `UPDATE users SET is_admin = ?, updated_at = datetime('now') WHERE id = ?`
+            ),
+            setBlocked: this.#db.prepare(
+                `UPDATE users SET is_blocked = ?, updated_at = datetime('now') WHERE id = ?`
+            ),
+            countMessages: this.#db.prepare('SELECT COUNT(*) as c FROM messages'),
+            countThreads: this.#db.prepare('SELECT COUNT(*) as c FROM threads'),
+            countUsers: this.#db.prepare('SELECT COUNT(*) as c FROM users'),
         };
     }
 
@@ -158,19 +182,15 @@ export class Database {
     }
 
     listThreads(limit = 50, offset = 0) {
-        return this.#db.prepare(
-            `SELECT * FROM threads ORDER BY updated_at DESC LIMIT ? OFFSET ?`
-        ).all(limit, offset);
+        return this.#stmts.listThreads.all(limit, offset);
     }
 
     setThreadPrefix(threadId, prefix) {
-        this.#db.prepare(`UPDATE threads SET prefix = ?, updated_at = datetime('now') WHERE id = ?`)
-            .run(prefix, String(threadId));
+        this.#stmts.setThreadPrefix.run(prefix, String(threadId));
     }
 
     setThreadEnabled(threadId, enabled) {
-        this.#db.prepare(`UPDATE threads SET enabled = ?, updated_at = datetime('now') WHERE id = ?`)
-            .run(enabled ? 1 : 0, String(threadId));
+        this.#stmts.setThreadEnabled.run(enabled ? 1 : 0, String(threadId));
     }
 
     // --- Users ---
@@ -184,19 +204,15 @@ export class Database {
     }
 
     listUsers(limit = 50, offset = 0) {
-        return this.#db.prepare(
-            `SELECT * FROM users ORDER BY updated_at DESC LIMIT ? OFFSET ?`
-        ).all(limit, offset);
+        return this.#stmts.listUsers.all(limit, offset);
     }
 
     setAdmin(userId, isAdmin) {
-        this.#db.prepare(`UPDATE users SET is_admin = ?, updated_at = datetime('now') WHERE id = ?`)
-            .run(isAdmin ? 1 : 0, String(userId));
+        this.#stmts.setAdmin.run(isAdmin ? 1 : 0, String(userId));
     }
 
     setBlocked(userId, isBlocked) {
-        this.#db.prepare(`UPDATE users SET is_blocked = ?, updated_at = datetime('now') WHERE id = ?`)
-            .run(isBlocked ? 1 : 0, String(userId));
+        this.#stmts.setBlocked.run(isBlocked ? 1 : 0, String(userId));
     }
 
     isBlocked(userId) {
@@ -218,9 +234,9 @@ export class Database {
     // --- Stats ---
 
     stats() {
-        const msgCount = this.#db.prepare('SELECT COUNT(*) as c FROM messages').get();
-        const threadCount = this.#db.prepare('SELECT COUNT(*) as c FROM threads').get();
-        const userCount = this.#db.prepare('SELECT COUNT(*) as c FROM users').get();
+        const msgCount = this.#stmts.countMessages.get();
+        const threadCount = this.#stmts.countThreads.get();
+        const userCount = this.#stmts.countUsers.get();
         return {
             messages: msgCount.c,
             threads: threadCount.c,

@@ -2,19 +2,26 @@
 import { parseCommand } from '../commands/parser.mjs';
 
 export function createCommandHandler(registry, db, metrics) {
+    // Cache last parsed result to avoid parsing twice (match → handle)
+    let lastParsed = null;
+    let lastText = null;
+
     return {
         name: 'command',
 
         match(eventType, msg) {
             const text = msg.text?.trim();
             if (!text) return false;
+            if (text === lastText) return lastParsed !== null && registry.get(lastParsed.command) !== undefined;
             const parsed = parseCommand(text);
+            lastText = text;
+            lastParsed = parsed;
             return parsed !== null && registry.get(parsed.command) !== undefined;
         },
 
         async handle(eventType, msg, adapter) {
             const text = msg.text.trim();
-            const parsed = parseCommand(text);
+            const parsed = (text === lastText && lastParsed) ? lastParsed : parseCommand(text);
             if (!parsed) return;
 
             const cmdDef = registry.get(parsed.command);

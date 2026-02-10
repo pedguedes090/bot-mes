@@ -21,6 +21,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
 # Set in docker run: --memory=128m --cpus=1
 # GC tuning for low-memory: --max-old-space-size=96
 
-ENV NODE_OPTIONS="--max-old-space-size=96"
+ENV NODE_OPTIONS="--max-old-space-size=96 --expose-gc"
 
 CMD ["node", "--experimental-sqlite", "src/main.mjs"]
