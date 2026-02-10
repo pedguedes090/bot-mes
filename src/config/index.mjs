@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Load .env file manually (no external dep)
@@ -20,7 +20,22 @@ function loadDotEnv(filePath) {
     }
 }
 
-loadDotEnv(resolve(process.cwd(), '.env'));
+const ENV_FILE_PATH = resolve(process.cwd(), '.env');
+loadDotEnv(ENV_FILE_PATH);
+
+// Keys that are safe to view/edit via the dashboard (excludes secrets)
+const EDITABLE_ENV_KEYS = [
+    'LOG_LEVEL',
+    'ENABLE_E2EE',
+    'AUTO_RECONNECT',
+    'MAX_CONCURRENT_HANDLERS',
+    'HANDLER_TIMEOUT_MS',
+    'SEND_RATE_PER_SEC',
+    'IDEMPOTENCY_CACHE_SIZE',
+    'DB_PATH',
+    'METRICS_PORT',
+    'DEVICE_DATA_PATH',
+];
 
 function env(key, fallback) {
     return process.env[key] ?? fallback;
@@ -88,4 +103,73 @@ export function loadConfig() {
         deviceDataPath: env('DEVICE_DATA_PATH', './device.json'),
         dbPath: env('DB_PATH', './bot.db'),
     });
+}
+
+/**
+ * Read current values for editable env keys.
+ * @returns {Record<string, string>}
+ */
+export function getEditableEnv() {
+    const result = {};
+    for (const key of EDITABLE_ENV_KEYS) {
+        result[key] = process.env[key] ?? '';
+    }
+    return result;
+}
+
+/**
+ * Update editable env vars — writes to process.env and persists to .env file.
+ * Only keys in EDITABLE_ENV_KEYS are accepted; unknown keys are silently ignored.
+ * @param {Record<string, string>} updates
+ * @returns {{ applied: string[] }}
+ */
+export function updateEnv(updates) {
+    const applied = [];
+    const safeUpdates = {};
+    for (const [key, value] of Object.entries(updates)) {
+        if (!EDITABLE_ENV_KEYS.includes(key)) continue;
+        const strVal = String(value);
+        safeUpdates[key] = strVal;
+        process.env[key] = strVal;
+        applied.push(key);
+    }
+
+    if (applied.length > 0) {
+        persistEnvFile(safeUpdates);
+    }
+
+    return { applied };
+}
+
+/**
+ * Merge updates into the .env file, preserving comments and unrelated keys.
+ */
+function persistEnvFile(updates) {
+    const remaining = { ...updates };
+    let lines = [];
+
+    if (existsSync(ENV_FILE_PATH)) {
+        const content = readFileSync(ENV_FILE_PATH, 'utf-8');
+        lines = content.split('\n');
+    }
+
+    // Update existing lines in-place
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) continue;
+        const key = trimmed.slice(0, eqIdx).trim();
+        if (key in remaining) {
+            lines[i] = `${key}=${remaining[key]}`;
+            delete remaining[key];
+        }
+    }
+
+    // Append any new keys that weren't already in the file
+    for (const [key, value] of Object.entries(remaining)) {
+        lines.push(`${key}=${value}`);
+    }
+
+    writeFileSync(ENV_FILE_PATH, lines.join('\n'), 'utf-8');
 }
