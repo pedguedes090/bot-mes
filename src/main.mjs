@@ -3,6 +3,7 @@ import { Logger } from './observability/logger.mjs';
 import { Metrics } from './observability/metrics.mjs';
 import { Database } from './adapters/database.mjs';
 import { MessengerAdapter } from './adapters/messenger.mjs';
+import { GeminiAdapter } from './adapters/gemini.mjs';
 import { BotCore } from './bot/core.mjs';
 import { buildHandlers } from './handlers/index.mjs';
 import { createDashboardHandler } from './dashboard/handler.mjs';
@@ -16,6 +17,7 @@ logger.info('Starting bot', {
     autoReconnect: config.autoReconnect,
     maxConcurrent: config.maxConcurrentHandlers,
     sendRate: config.sendRatePerSec,
+    geminiEnabled: Boolean(config.geminiApiKey),
 });
 
 // Start metrics/health server
@@ -24,12 +26,15 @@ metrics.startServer(config.metricsPort, logger);
 // Init database
 const db = new Database(config.dbPath, logger);
 
+// Init Gemini adapter
+const gemini = new GeminiAdapter(config.geminiApiKey, config.geminiModel, logger);
+
 // Wire admin dashboard into metrics server
 const dashboardHandler = createDashboardHandler(db, metrics, logger);
 metrics.setDashboardHandler(dashboardHandler);
 
-// Build handlers with command system
-const { handlers } = buildHandlers(db, metrics);
+// Build handlers with command system and AI chat
+const { handlers } = buildHandlers(db, metrics, gemini);
 
 // Create adapter and bot core
 const adapter = new MessengerAdapter(config, logger, metrics);
