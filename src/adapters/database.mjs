@@ -125,6 +125,12 @@ export class Database {
         return this.#stmts.getThread.get(String(threadId)) || null;
     }
 
+    listThreads(limit = 50, offset = 0) {
+        return this.#db.prepare(
+            `SELECT * FROM threads ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+        ).all(limit, offset);
+    }
+
     setThreadPrefix(threadId, prefix) {
         this.#db.prepare(`UPDATE threads SET prefix = ?, updated_at = datetime('now') WHERE id = ?`)
             .run(prefix, String(threadId));
@@ -143,6 +149,12 @@ export class Database {
 
     getUser(userId) {
         return this.#stmts.getUser.get(String(userId)) || null;
+    }
+
+    listUsers(limit = 50, offset = 0) {
+        return this.#db.prepare(
+            `SELECT * FROM users ORDER BY updated_at DESC LIMIT ? OFFSET ?`
+        ).all(limit, offset);
     }
 
     setAdmin(userId, isAdmin) {
