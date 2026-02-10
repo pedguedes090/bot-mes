@@ -9,6 +9,10 @@
 //   GET  /api/threads         — List threads (with pagination)
 //   GET  /api/threads/:id     — Get thread details
 //   GET  /api/messages        — Recent messages (with filters)
+//   GET  /api/env             — Read editable env vars
+//   POST /api/env             — Update editable env vars
+
+import { getEditableEnv, updateEnv } from '../config/index.mjs';
 
 /**
  * Create the admin dashboard request handler.
@@ -80,6 +84,14 @@ export function createDashboardHandler(db, metrics, logger) {
         return handleListMessages(res, url, db);
       }
 
+      if (path === '/api/env' && req.method === 'GET') {
+        return handleGetEnv(res);
+      }
+
+      if (path === '/api/env' && req.method === 'POST') {
+        return handleBody(req, res, (body) => handleUpdateEnv(res, body, log));
+      }
+
       // 404 for unmatched API routes
       sendJSON(res, 404, { error: 'Not found' });
       return true;
@@ -112,6 +124,12 @@ function handleOverview(res, db, metrics) {
     errors: {
       handler: snapshot['errors.handler'] || 0,
       total: snapshot['errors.total'] || 0,
+    },
+    memory: {
+      rss: snapshot.memory_rss || 0,
+      heap_used: snapshot.memory_heap_used || 0,
+      heap_total: snapshot.memory_heap_total || 0,
+      external: snapshot.memory_external || 0,
     },
     database: dbStats,
   });
@@ -182,6 +200,21 @@ function handleListMessages(res, url, db) {
   return true;
 }
 
+function handleGetEnv(res) {
+  sendJSON(res, 200, { env: getEditableEnv() });
+  return true;
+}
+
+function handleUpdateEnv(res, body, log) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    sendJSON(res, 400, { error: 'Request body must be a JSON object of key-value pairs' });
+    return;
+  }
+  const result = updateEnv(body);
+  log.info('Env updated via dashboard', { applied: result.applied });
+  sendJSON(res, 200, { ok: true, applied: result.applied });
+}
+
 // --- Helpers ---
 
 function sendJSON(res, status, data) {
@@ -246,13 +279,22 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
   .refresh-btn:hover { background: #334155; }
   .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
   #error { color: #f87171; margin: 0.5rem 0; display: none; }
+  .env-form { background: #1e293b; border-radius: 8px; padding: 1rem; margin-top: 0.5rem; }
+  .env-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+  .env-row label { min-width: 220px; font-size: 0.8rem; color: #94a3b8; font-family: monospace; }
+  .env-row input { flex: 1; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 0.375rem 0.5rem; border-radius: 4px; font-size: 0.85rem; font-family: monospace; }
+  .env-row input:focus { outline: none; border-color: #38bdf8; }
+  .save-btn { background: #059669; color: white; border: none; padding: 0.5rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; margin-top: 0.5rem; }
+  .save-btn:hover { background: #047857; }
+  .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #env-status { font-size: 0.8rem; margin-left: 0.75rem; }
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
-    <h1>\\u{1F916} Bot Admin Dashboard</h1>
-    <button class="refresh-btn" onclick="loadAll()">\\u21BB Refresh</button>
+    <h1>&#x1F916; Bot Admin Dashboard</h1>
+    <button class="refresh-btn" onclick="loadAll()">&#x21BB; Refresh</button>
   </div>
   <div id="error"></div>
 
@@ -270,10 +312,20 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <thead><tr><th>ID</th><th>Name</th><th>Group</th><th>Prefix</th><th>Enabled</th></tr></thead>
     <tbody id="threads-body"><tr><td colspan="5" style="color:#64748b">Loading...</td></tr></tbody>
   </table>
+
+  <h2>&#x2699;&#xFE0F; Environment Settings</h2>
+  <div class="env-form" id="env-form">
+    <div style="color:#64748b">Loading...</div>
+  </div>
+  <div style="margin-top:0.5rem;display:flex;align-items:center">
+    <button class="save-btn" id="env-save-btn" onclick="saveEnv()">Save Changes</button>
+    <span id="env-status"></span>
+  </div>
 </div>
 
 <script>
 const API = window.location.origin;
+var HEAP_WARN_THRESHOLD = 0.85;
 
 function fmt(n) { return n != null ? n.toLocaleString() : '\\u2014'; }
 
@@ -301,12 +353,21 @@ function card(label, value, cls) {
 
 function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  var u = ['B','KB','MB','GB'];
+  var i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return b.toFixed(1) + ' ' + u[i];
+}
+
 async function loadOverview() {
   try {
     var res = await fetch(API + '/api/overview');
     var data = await res.json();
     var kpis = document.getElementById('kpis');
     var errClass = (data.errors && data.errors.total > 0) ? 'warn' : 'ok';
+    var memClass = (data.memory && data.memory.heap_used > data.memory.heap_total * HEAP_WARN_THRESHOLD) ? 'warn' : 'ok';
     kpis.innerHTML =
       card('Uptime', formatUptime(data.uptime_seconds), 'ok') +
       card('Processed', fmt(data.events && data.events.processed), 'ok') +
@@ -315,7 +376,9 @@ async function loadOverview() {
       card('Errors', fmt(data.errors && data.errors.total), errClass) +
       card('Users', fmt(data.database && data.database.users), 'ok') +
       card('Threads', fmt(data.database && data.database.threads), 'ok') +
-      card('Messages', fmt(data.database && data.database.messages), 'ok');
+      card('Messages', fmt(data.database && data.database.messages), 'ok') +
+      card('Memory (RSS)', fmtBytes(data.memory && data.memory.rss), memClass) +
+      card('Heap Used', fmtBytes(data.memory && data.memory.heap_used), memClass);
     showError('');
   } catch (e) { showError('Failed to load overview: ' + e.message); }
 }
@@ -388,7 +451,51 @@ async function loadThreads() {
   } catch (e) { showError('Failed to load threads: ' + e.message); }
 }
 
-function loadAll() { loadOverview(); loadUsers(); loadThreads(); }
+async function loadEnv() {
+  try {
+    var res = await fetch(API + '/api/env');
+    var data = await res.json();
+    var form = document.getElementById('env-form');
+    if (!data.env || !Object.keys(data.env).length) {
+      form.innerHTML = '<div style="color:#64748b">No editable variables</div>';
+      return;
+    }
+    form.innerHTML = Object.keys(data.env).map(function(key) {
+      return '<div class="env-row">' +
+        '<label for="env-' + esc(key) + '">' + esc(key) + '</label>' +
+        '<input type="text" id="env-' + esc(key) + '" data-env-key="' + esc(key) + '" value="' + esc(data.env[key]) + '">' +
+        '</div>';
+    }).join('');
+    document.getElementById('env-status').textContent = '';
+  } catch (e) { showError('Failed to load env: ' + e.message); }
+}
+
+async function saveEnv() {
+  var inputs = document.querySelectorAll('#env-form input[data-env-key]');
+  var body = {};
+  inputs.forEach(function(el) { body[el.getAttribute('data-env-key')] = el.value; });
+  var btn = document.getElementById('env-save-btn');
+  var status = document.getElementById('env-status');
+  btn.disabled = true;
+  status.textContent = 'Saving...';
+  status.style.color = '#94a3b8';
+  try {
+    var res = await fetch(API + '/api/env', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+    status.textContent = '\\u2713 Saved (' + data.applied.length + ' keys updated)';
+    status.style.color = '#4ade80';
+  } catch (e) {
+    status.textContent = '\\u2717 ' + e.message;
+    status.style.color = '#f87171';
+  } finally { btn.disabled = false; }
+}
+
+function loadAll() { loadOverview(); loadUsers(); loadThreads(); loadEnv(); }
 loadAll();
 setInterval(loadAll, 30000);
 </script>

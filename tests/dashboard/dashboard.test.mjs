@@ -1,6 +1,8 @@
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { existsSync, unlinkSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createDashboardHandler } from '../../src/dashboard/handler.mjs';
 
 // Minimal mock logger
@@ -74,11 +76,27 @@ function startTestServer(handler) {
 
 describe('Dashboard API', () => {
     let server;
+    const envFilePath = resolve(process.cwd(), '.env');
+    let envBackup = null;
+
+    beforeEach(() => {
+        if (existsSync(envFilePath)) {
+            envBackup = readFileSync(envFilePath, 'utf-8');
+        } else {
+            envBackup = null;
+        }
+    });
 
     afterEach(() => {
         if (server) {
             try { server.close(); } catch { /* ignore */ }
             server = null;
+        }
+        // Restore .env file to original state
+        if (envBackup !== null) {
+            writeFileSync(envFilePath, envBackup, 'utf-8');
+        } else if (existsSync(envFilePath)) {
+            unlinkSync(envFilePath);
         }
     });
 
@@ -251,5 +269,113 @@ describe('Dashboard API', () => {
         const res = await fetch(`${ctx.base}/api/overview`, { method: 'OPTIONS' });
         assert.strictEqual(res.status, 204);
         assert.ok(res.headers.get('access-control-allow-origin'));
+    });
+
+    it('GET /api/env returns editable env vars', async () => {
+        const db = mockDb();
+        const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const res = await fetch(`${ctx.base}/api/env`);
+        assert.strictEqual(res.status, 200);
+        const data = await res.json();
+        assert.ok(data.env);
+        assert.ok('LOG_LEVEL' in data.env);
+        assert.ok('MAX_CONCURRENT_HANDLERS' in data.env);
+        // Sensitive keys must not be exposed
+        assert.ok(!('FB_COOKIES' in data.env));
+        assert.ok(!('FB_C_USER' in data.env));
+        assert.ok(!('FB_XS' in data.env));
+    });
+
+    it('POST /api/env updates env vars and returns applied keys', async () => {
+        const db = mockDb();
+        const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const originalLogLevel = process.env.LOG_LEVEL;
+        const originalSendRate = process.env.SEND_RATE_PER_SEC;
+        try {
+            const res = await fetch(`${ctx.base}/api/env`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ LOG_LEVEL: 'debug', SEND_RATE_PER_SEC: '10' }),
+            });
+            assert.strictEqual(res.status, 200);
+            const data = await res.json();
+            assert.strictEqual(data.ok, true);
+            assert.ok(data.applied.includes('LOG_LEVEL'));
+            assert.ok(data.applied.includes('SEND_RATE_PER_SEC'));
+            assert.strictEqual(process.env.LOG_LEVEL, 'debug');
+            assert.strictEqual(process.env.SEND_RATE_PER_SEC, '10');
+        } finally {
+            if (originalLogLevel !== undefined) process.env.LOG_LEVEL = originalLogLevel;
+            else delete process.env.LOG_LEVEL;
+            if (originalSendRate !== undefined) process.env.SEND_RATE_PER_SEC = originalSendRate;
+            else delete process.env.SEND_RATE_PER_SEC;
+        }
+    });
+
+    it('POST /api/env ignores sensitive keys', async () => {
+        const db = mockDb();
+        const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const originalLogLevel = process.env.LOG_LEVEL;
+        try {
+            const res = await fetch(`${ctx.base}/api/env`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ FB_COOKIES: 'hacked', LOG_LEVEL: 'warn' }),
+            });
+            assert.strictEqual(res.status, 200);
+            const data = await res.json();
+            assert.ok(!data.applied.includes('FB_COOKIES'));
+            assert.ok(data.applied.includes('LOG_LEVEL'));
+        } finally {
+            if (originalLogLevel !== undefined) process.env.LOG_LEVEL = originalLogLevel;
+            else delete process.env.LOG_LEVEL;
+        }
+    });
+
+    it('POST /api/env rejects invalid body', async () => {
+        const db = mockDb();
+        const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const res = await fetch(`${ctx.base}/api/env`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: 'not json',
+        });
+        assert.strictEqual(res.status, 400);
+    });
+
+    it('GET /api/overview includes memory metrics', async () => {
+        const db = mockDb();
+        const metricsObj = mockMetrics();
+        // Augment snapshot with memory
+        const origSnapshot = metricsObj.snapshot;
+        metricsObj.snapshot = () => ({
+            ...origSnapshot(),
+            memory_rss: 50_000_000,
+            memory_heap_used: 30_000_000,
+            memory_heap_total: 60_000_000,
+            memory_external: 1_000_000,
+        });
+        const handler = createDashboardHandler(db, metricsObj, mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const res = await fetch(`${ctx.base}/api/overview`);
+        assert.strictEqual(res.status, 200);
+        const data = await res.json();
+        assert.ok(data.memory);
+        assert.strictEqual(data.memory.rss, 50_000_000);
+        assert.strictEqual(data.memory.heap_used, 30_000_000);
     });
 });
