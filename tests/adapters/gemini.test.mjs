@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, mock, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { GeminiAdapter } from '../../src/adapters/gemini.mjs';
 
@@ -53,5 +53,71 @@ describe('GeminiAdapter', () => {
 
         adapter.configure('', undefined);
         assert.strictEqual(adapter.enabled, false);
+    });
+
+    it('sends API key via x-goog-api-key header, not in URL', async () => {
+        const originalFetch = globalThis.fetch;
+        let capturedUrl;
+        let capturedOptions;
+
+        globalThis.fetch = async (url, options) => {
+            capturedUrl = url;
+            capturedOptions = options;
+            return {
+                ok: true,
+                json: async () => ({
+                    candidates: [{ content: { parts: [{ text: '{"should_reply":true,"need_search":false,"reason":"test"}' }] } }],
+                }),
+            };
+        };
+
+        try {
+            const adapter = new GeminiAdapter('test-api-key-123', 'gemini-2.0-flash', createLogger());
+            await adapter.decide('Hello');
+
+            // API key must NOT be in URL
+            assert.ok(!capturedUrl.includes('test-api-key-123'), 'API key should not appear in URL');
+            assert.ok(!capturedUrl.includes('key='), 'key= query param should not be in URL');
+
+            // API key must be in x-goog-api-key header
+            assert.strictEqual(capturedOptions.headers['x-goog-api-key'], 'test-api-key-123');
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it('sends correct request body structure to Gemini API', async () => {
+        const originalFetch = globalThis.fetch;
+        let capturedBody;
+
+        globalThis.fetch = async (_url, options) => {
+            capturedBody = JSON.parse(options.body);
+            return {
+                ok: true,
+                json: async () => ({
+                    candidates: [{ content: { parts: [{ text: 'Generated reply' }] } }],
+                }),
+            };
+        };
+
+        try {
+            const adapter = new GeminiAdapter('test-key', 'gemini-2.0-flash', createLogger());
+            await adapter.generateReply('Hello there');
+
+            // Verify system_instruction structure
+            assert.ok(capturedBody.system_instruction, 'body should include system_instruction');
+            assert.ok(Array.isArray(capturedBody.system_instruction.parts), 'system_instruction should have parts array');
+
+            // Verify contents structure
+            assert.ok(Array.isArray(capturedBody.contents), 'body should include contents array');
+            assert.strictEqual(capturedBody.contents[0].role, 'user');
+            assert.ok(Array.isArray(capturedBody.contents[0].parts), 'contents entry should have parts array');
+
+            // Verify generationConfig
+            assert.ok(capturedBody.generationConfig, 'body should include generationConfig');
+            assert.strictEqual(typeof capturedBody.generationConfig.temperature, 'number');
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
     });
 });
