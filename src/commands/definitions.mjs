@@ -51,6 +51,7 @@ export function registerBuiltinCommands(registry) {
             const lines = [
                 '📊 Bot Status',
                 `⏱ Uptime: ${formatUptime(snapshot.uptime_seconds || 0)}`,
+                `🧠 RAM: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`,
                 `📨 Messages processed: ${snapshot['events.processed'] || 0}`,
                 `📤 Messages sent: ${snapshot['messages.sent'] || 0}`,
                 `🖼 Media sent: ${snapshot['media.sent'] || 0}`,

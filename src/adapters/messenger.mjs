@@ -180,6 +180,10 @@ export class MessengerAdapter extends EventEmitter {
         return this.#client.sendTypingIndicator(threadId, isTyping, isGroup);
     }
 
+    async getUserInfo(userId) {
+        return this.#client.getUserInfo(BigInt(userId));
+    }
+
     async disconnect() {
         if (this.#client) {
             this.#logger.info('Disconnecting');

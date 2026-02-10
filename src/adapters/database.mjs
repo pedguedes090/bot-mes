@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const MIGRATIONS = [
     // v1: Initial schema
@@ -43,6 +43,12 @@ const MIGRATIONS = [
 
     INSERT OR IGNORE INTO settings (key, value) VALUES ('schema_version', '1');
     `,
+    // v2: Add username and profile_pic to users
+    `
+    ALTER TABLE users ADD COLUMN username TEXT;
+    ALTER TABLE users ADD COLUMN profile_pic TEXT;
+    INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', '2');
+    `,
 ];
 
 export class Database {
@@ -62,10 +68,33 @@ export class Database {
     }
 
     #migrate() {
-        for (const sql of MIGRATIONS) {
-            this.#db.exec(sql);
+        let currentVersion = 0;
+        try {
+            const row = this.#db.prepare("SELECT value FROM settings WHERE key = 'schema_version'").get();
+            if (row) currentVersion = parseInt(row.value, 10);
+        } catch {
+            // Settings table or key might not exist yet -> version 0
         }
-        this.#logger.debug('Migrations applied', { version: SCHEMA_VERSION });
+
+        this.#logger.info('Current DB schema version', { version: currentVersion });
+
+        for (let i = 0; i < MIGRATIONS.length; i++) {
+            const migrationVer = i + 1;
+            if (currentVersion >= migrationVer) continue;
+
+            this.#logger.info(`Applying migration v${migrationVer}`);
+            try {
+                this.#db.exec(MIGRATIONS[i]);
+            } catch (err) {
+                // Handle partial migration state (e.g. column added but version not updated)
+                if (err.message.includes('duplicate column name')) {
+                    this.#logger.warn(`Migration v${migrationVer} partial error (safe to ignore): ${err.message}`);
+                } else {
+                    throw err;
+                }
+            }
+        }
+        this.#logger.debug('Migrations completed', { targetVersion: SCHEMA_VERSION });
     }
 
     #prepareStatements() {
@@ -87,9 +116,12 @@ export class Database {
                 `UPDATE threads SET updated_at = datetime('now') WHERE id = ?`
             ),
             upsertUser: this.#db.prepare(
-                `INSERT INTO users (id, name) VALUES (?, ?)
-                 ON CONFLICT(id) DO UPDATE SET name = coalesce(excluded.name, name),
-                 updated_at = datetime('now')`
+                `INSERT INTO users (id, name, username, profile_pic) VALUES (?, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET 
+                    name = coalesce(excluded.name, name),
+                    username = coalesce(excluded.username, username),
+                    profile_pic = coalesce(excluded.profile_pic, profile_pic),
+                    updated_at = datetime('now')`
             ),
             getUser: this.#db.prepare(`SELECT * FROM users WHERE id = ?`),
             setSetting: this.#db.prepare(
@@ -143,8 +175,8 @@ export class Database {
 
     // --- Users ---
 
-    ensureUser(userId, name = null) {
-        this.#stmts.upsertUser.run(String(userId), name);
+    ensureUser(userId, name = null, username = null, profilePic = null) {
+        this.#stmts.upsertUser.run(String(userId), name, username, profilePic);
     }
 
     getUser(userId) {

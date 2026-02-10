@@ -18,203 +18,203 @@
  * @returns {(req: import('http').IncomingMessage, res: import('http').ServerResponse) => boolean}
  */
 export function createDashboardHandler(db, metrics, logger) {
-    const log = logger.child('dashboard');
+  const log = logger.child('dashboard');
 
-    return function handleDashboard(req, res) {
-        const url = new URL(req.url, 'http://localhost');
-        const path = url.pathname;
+  return function handleDashboard(req, res) {
+    const url = new URL(req.url, 'http://localhost');
+    const path = url.pathname;
 
-        // Only handle /api/* and /dashboard
-        if (!path.startsWith('/api/') && path !== '/dashboard') return false;
+    // Only handle /api/* and /dashboard
+    if (!path.startsWith('/api/') && path !== '/dashboard') return false;
 
-        // CORS headers for local development
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    // CORS headers for local development
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-        if (req.method === 'OPTIONS') {
-            res.writeHead(204);
-            res.end();
-            return true;
-        }
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return true;
+    }
 
-        try {
-            if (path === '/dashboard') {
-                serveDashboardHTML(res);
-                return true;
-            }
+    try {
+      if (path === '/dashboard') {
+        serveDashboardHTML(res);
+        return true;
+      }
 
-            if (path === '/api/overview' && req.method === 'GET') {
-                return handleOverview(res, db, metrics);
-            }
+      if (path === '/api/overview' && req.method === 'GET') {
+        return handleOverview(res, db, metrics);
+      }
 
-            if (path === '/api/users' && req.method === 'GET') {
-                return handleListUsers(res, url, db);
-            }
+      if (path === '/api/users' && req.method === 'GET') {
+        return handleListUsers(res, url, db);
+      }
 
-            const userMatch = path.match(/^\/api\/users\/([^/]+)$/);
-            if (userMatch && req.method === 'GET') {
-                return handleGetUser(res, userMatch[1], db);
-            }
+      const userMatch = path.match(/^\/api\/users\/([^/]+)$/);
+      if (userMatch && req.method === 'GET') {
+        return handleGetUser(res, userMatch[1], db);
+      }
 
-            const blockMatch = path.match(/^\/api\/users\/([^/]+)\/block$/);
-            if (blockMatch && req.method === 'POST') {
-                return handleBody(req, res, (body) => handleBlockUser(res, blockMatch[1], body, db, log));
-            }
+      const blockMatch = path.match(/^\/api\/users\/([^/]+)\/block$/);
+      if (blockMatch && req.method === 'POST') {
+        return handleBody(req, res, (body) => handleBlockUser(res, blockMatch[1], body, db, log));
+      }
 
-            const adminMatch = path.match(/^\/api\/users\/([^/]+)\/admin$/);
-            if (adminMatch && req.method === 'POST') {
-                return handleBody(req, res, (body) => handleAdminUser(res, adminMatch[1], body, db, log));
-            }
+      const adminMatch = path.match(/^\/api\/users\/([^/]+)\/admin$/);
+      if (adminMatch && req.method === 'POST') {
+        return handleBody(req, res, (body) => handleAdminUser(res, adminMatch[1], body, db, log));
+      }
 
-            if (path === '/api/threads' && req.method === 'GET') {
-                return handleListThreads(res, url, db);
-            }
+      if (path === '/api/threads' && req.method === 'GET') {
+        return handleListThreads(res, url, db);
+      }
 
-            const threadMatch = path.match(/^\/api\/threads\/([^/]+)$/);
-            if (threadMatch && req.method === 'GET') {
-                return handleGetThread(res, threadMatch[1], db);
-            }
+      const threadMatch = path.match(/^\/api\/threads\/([^/]+)$/);
+      if (threadMatch && req.method === 'GET') {
+        return handleGetThread(res, threadMatch[1], db);
+      }
 
-            if (path === '/api/messages' && req.method === 'GET') {
-                return handleListMessages(res, url, db);
-            }
+      if (path === '/api/messages' && req.method === 'GET') {
+        return handleListMessages(res, url, db);
+      }
 
-            // 404 for unmatched API routes
-            sendJSON(res, 404, { error: 'Not found' });
-            return true;
-        } catch (err) {
-            log.error('Dashboard error', { error: err.message, path });
-            sendJSON(res, 500, { error: 'Internal server error' });
-            return true;
-        }
-    };
+      // 404 for unmatched API routes
+      sendJSON(res, 404, { error: 'Not found' });
+      return true;
+    } catch (err) {
+      log.error('Dashboard error', { error: err.message, path });
+      sendJSON(res, 500, { error: 'Internal server error' });
+      return true;
+    }
+  };
 }
 
 // --- Route handlers ---
 
 function handleOverview(res, db, metrics) {
-    const snapshot = metrics.snapshot();
-    const dbStats = db ? db.stats() : { messages: 0, threads: 0, users: 0 };
-    sendJSON(res, 200, {
-        uptime_seconds: snapshot.uptime_seconds || 0,
-        events: {
-            received: snapshot['events.received'] || 0,
-            processed: snapshot['events.processed'] || 0,
-            blocked: snapshot['events.blocked'] || 0,
-            deduplicated: snapshot['events.deduplicated'] || 0,
-            dropped: snapshot['events.dropped'] || 0,
-        },
-        messaging: {
-            sent: snapshot['messages.sent'] || 0,
-            media_sent: snapshot['media.sent'] || 0,
-        },
-        errors: {
-            handler: snapshot['errors.handler'] || 0,
-            total: snapshot['errors.total'] || 0,
-        },
-        database: dbStats,
-    });
-    return true;
+  const snapshot = metrics.snapshot();
+  const dbStats = db ? db.stats() : { messages: 0, threads: 0, users: 0 };
+  sendJSON(res, 200, {
+    uptime_seconds: snapshot.uptime_seconds || 0,
+    events: {
+      received: snapshot['events.received'] || 0,
+      processed: snapshot['events.processed'] || 0,
+      blocked: snapshot['events.blocked'] || 0,
+      deduplicated: snapshot['events.deduplicated'] || 0,
+      dropped: snapshot['events.dropped'] || 0,
+    },
+    messaging: {
+      sent: snapshot['messages.sent'] || 0,
+      media_sent: snapshot['media.sent'] || 0,
+    },
+    errors: {
+      handler: snapshot['errors.handler'] || 0,
+      total: snapshot['errors.total'] || 0,
+    },
+    database: dbStats,
+  });
+  return true;
 }
 
 function handleListUsers(res, url, db) {
-    if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
-    const limit = clampInt(url.searchParams.get('limit'), 1, 100, 50);
-    const offset = clampInt(url.searchParams.get('offset'), 0, Infinity, 0);
-    const rows = db.listUsers(limit, offset);
-    sendJSON(res, 200, { users: rows, limit, offset });
-    return true;
+  if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
+  const limit = clampInt(url.searchParams.get('limit'), 1, 100, 50);
+  const offset = clampInt(url.searchParams.get('offset'), 0, Infinity, 0);
+  const rows = db.listUsers(limit, offset);
+  sendJSON(res, 200, { users: rows, limit, offset });
+  return true;
 }
 
 function handleGetUser(res, userId, db) {
-    if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
-    const user = db.getUser(userId);
-    if (!user) { sendJSON(res, 404, { error: 'User not found' }); return true; }
-    sendJSON(res, 200, user);
-    return true;
+  if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
+  const user = db.getUser(userId);
+  if (!user) { sendJSON(res, 404, { error: 'User not found' }); return true; }
+  sendJSON(res, 200, user);
+  return true;
 }
 
 function handleBlockUser(res, userId, body, db, log) {
-    if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return; }
-    const user = db.getUser(userId);
-    if (!user) { sendJSON(res, 404, { error: 'User not found' }); return; }
-    const blocked = body.blocked === true;
-    db.setBlocked(userId, blocked);
-    log.info('User block status changed', { userId, blocked });
-    sendJSON(res, 200, { userId, blocked });
+  if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return; }
+  const user = db.getUser(userId);
+  if (!user) { sendJSON(res, 404, { error: 'User not found' }); return; }
+  const blocked = body.blocked === true;
+  db.setBlocked(userId, blocked);
+  log.info('User block status changed', { userId, blocked });
+  sendJSON(res, 200, { userId, blocked });
 }
 
 function handleAdminUser(res, userId, body, db, log) {
-    if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return; }
-    const user = db.getUser(userId);
-    if (!user) { sendJSON(res, 404, { error: 'User not found' }); return; }
-    const isAdmin = body.admin === true;
-    db.setAdmin(userId, isAdmin);
-    log.info('User admin status changed', { userId, isAdmin });
-    sendJSON(res, 200, { userId, admin: isAdmin });
+  if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return; }
+  const user = db.getUser(userId);
+  if (!user) { sendJSON(res, 404, { error: 'User not found' }); return; }
+  const isAdmin = body.admin === true;
+  db.setAdmin(userId, isAdmin);
+  log.info('User admin status changed', { userId, isAdmin });
+  sendJSON(res, 200, { userId, admin: isAdmin });
 }
 
 function handleListThreads(res, url, db) {
-    if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
-    const limit = clampInt(url.searchParams.get('limit'), 1, 100, 50);
-    const offset = clampInt(url.searchParams.get('offset'), 0, Infinity, 0);
-    const rows = db.listThreads(limit, offset);
-    sendJSON(res, 200, { threads: rows, limit, offset });
-    return true;
+  if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
+  const limit = clampInt(url.searchParams.get('limit'), 1, 100, 50);
+  const offset = clampInt(url.searchParams.get('offset'), 0, Infinity, 0);
+  const rows = db.listThreads(limit, offset);
+  sendJSON(res, 200, { threads: rows, limit, offset });
+  return true;
 }
 
 function handleGetThread(res, threadId, db) {
-    if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
-    const thread = db.getThread(threadId);
-    if (!thread) { sendJSON(res, 404, { error: 'Thread not found' }); return true; }
-    sendJSON(res, 200, thread);
-    return true;
+  if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
+  const thread = db.getThread(threadId);
+  if (!thread) { sendJSON(res, 404, { error: 'Thread not found' }); return true; }
+  sendJSON(res, 200, thread);
+  return true;
 }
 
 function handleListMessages(res, url, db) {
-    if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
-    const threadId = url.searchParams.get('thread');
-    const limit = clampInt(url.searchParams.get('limit'), 1, 100, 50);
-    if (!threadId) { sendJSON(res, 400, { error: 'Missing "thread" query parameter' }); return true; }
-    const rows = db.getMessages(threadId, limit);
-    sendJSON(res, 200, { messages: rows, thread: threadId, limit });
-    return true;
+  if (!db) { sendJSON(res, 503, { error: 'Database not available' }); return true; }
+  const threadId = url.searchParams.get('thread');
+  const limit = clampInt(url.searchParams.get('limit'), 1, 100, 50);
+  if (!threadId) { sendJSON(res, 400, { error: 'Missing "thread" query parameter' }); return true; }
+  const rows = db.getMessages(threadId, limit);
+  sendJSON(res, 200, { messages: rows, thread: threadId, limit });
+  return true;
 }
 
 // --- Helpers ---
 
 function sendJSON(res, status, data) {
-    res.writeHead(status, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(data));
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(data));
 }
 
 function clampInt(val, min, max, fallback) {
-    if (val === null || val === undefined) return fallback;
-    const n = parseInt(val, 10);
-    if (Number.isNaN(n)) return fallback;
-    return Math.min(Math.max(n, min), max);
+  if (val === null || val === undefined) return fallback;
+  const n = parseInt(val, 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
 }
 
 function handleBody(req, res, handler) {
-    const chunks = [];
-    req.on('data', chunk => { chunks.push(chunk); });
-    req.on('end', () => {
-        try {
-            const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString()) : {};
-            handler(body);
-        } catch {
-            sendJSON(res, 400, { error: 'Invalid JSON body' });
-        }
-    });
-    return true;
+  const chunks = [];
+  req.on('data', chunk => { chunks.push(chunk); });
+  req.on('end', () => {
+    try {
+      const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+      handler(body);
+    } catch {
+      sendJSON(res, 400, { error: 'Invalid JSON body' });
+    }
+  });
+  return true;
 }
 
 // --- Dashboard HTML (single page) ---
 
 function serveDashboardHTML(res) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(DASHBOARD_HTML);
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(DASHBOARD_HTML);
 }
 
 const DASHBOARD_HTML = `<!DOCTYPE html>
@@ -261,8 +261,8 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 
   <h2>Users</h2>
   <table>
-    <thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Status</th><th>First Seen</th></tr></thead>
-    <tbody id="users-body"><tr><td colspan="5" style="color:#64748b">Loading...</td></tr></tbody>
+    <thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Status</th><th>First Seen</th><th>Actions</th></tr></thead>
+    <tbody id="users-body"><tr><td colspan="6" style="color:#64748b">Loading...</td></tr></tbody>
   </table>
 
   <h2>Threads</h2>
@@ -320,18 +320,37 @@ async function loadOverview() {
   } catch (e) { showError('Failed to load overview: ' + e.message); }
 }
 
+async function toggleBlock(userId, block) {
+  if (!confirm('Are you sure you want to ' + (block ? 'BLOCK' : 'UNBLOCK') + ' user ' + userId + '?')) return;
+  try {
+    var res = await fetch(API + '/api/users/' + userId + '/block', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blocked: block })
+    });
+    if (!res.ok) throw new Error('Action failed');
+    loadUsers(); 
+  } catch (e) { alert(e.message); }
+}
+
 async function loadUsers() {
   try {
     var res = await fetch(API + '/api/users?limit=50');
     var data = await res.json();
     var tbody = document.getElementById('users-body');
-    if (!data.users || !data.users.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:#64748b">No users yet</td></tr>'; return; }
-    tbody.innerHTML = data.users.map(function(u) { return '<tr>' +
+    if (!data.users || !data.users.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:#64748b">No users yet</td></tr>'; return; }
+    tbody.innerHTML = data.users.map(function(u) {
+      var actionBtn = u.is_blocked
+        ? '<button class="refresh-btn" style="color:#4ade80;border-color:#4ade80" onclick="toggleBlock(\\'' + u.id + '\\', false)">Unban</button>'
+        : '<button class="refresh-btn" style="color:#f87171;border-color:#f87171" onclick="toggleBlock(\\'' + u.id + '\\', true)">Ban</button>';
+      
+      return '<tr>' +
       '<td>' + esc(u.id) + '</td>' +
       '<td>' + esc(u.name || '\\u2014') + '</td>' +
       '<td>' + (u.is_admin ? '<span class="badge badge-admin">Admin</span>' : 'User') + '</td>' +
       '<td>' + (u.is_blocked ? '<span class="badge badge-blocked">Blocked</span>' : '<span class="badge badge-active">Active</span>') + '</td>' +
-      '<td>' + esc(u.first_seen || '') + '</td></tr>';
+      '<td>' + esc(u.first_seen || '') + '</td>' +
+      '<td>' + actionBtn + '</td></tr>';
     }).join('');
   } catch (e) { showError('Failed to load users: ' + e.message); }
 }

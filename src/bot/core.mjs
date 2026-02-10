@@ -29,7 +29,7 @@ export class BotCore {
         });
     }
 
-    #dispatch(eventType, msg) {
+    async #dispatch(eventType, msg) {
         if (this.#shuttingDown) return;
 
         // Skip own messages
@@ -41,7 +41,7 @@ export class BotCore {
             try {
                 const senderId = String(msg.senderId || '');
                 if (senderId) {
-                    this.#db.ensureUser(senderId);
+                    await this.#ensureUser(senderId);
                     if (this.#db.isBlocked(senderId)) {
                         this.#metrics.inc('events.blocked');
                         return;
@@ -125,6 +125,29 @@ export class BotCore {
 
         if (this.#activeHandlers > 0) {
             this.#logger.warn('Forced shutdown with active handlers', { active: this.#activeHandlers });
+        }
+    }
+    async #ensureUser(userId) {
+        // optimistically check cache/db first? 
+        // For now, DB check is fast enough.
+        const user = this.#db.getUser(userId);
+        if (user) {
+            // Already exists, just ensure last seen update (optional, ensureUser updates updated_at)
+            // If we want to update updated_at on every msg:
+            this.#db.ensureUser(userId);
+            return;
+        }
+
+        // New user: fetch info
+        try {
+            const info = await this.#adapter.getUserInfo(userId);
+            this.#db.ensureUser(userId, info.name, info.username, info.profilePictureUrl);
+            this.#logger.info('Registered new user', { userId, name: info.name });
+            this.#metrics.inc('users.registered');
+        } catch (err) {
+            this.#logger.warn('Failed to fetch user info', { userId, error: err.message });
+            // Register with placeholder
+            this.#db.ensureUser(userId, `User ${userId}`);
         }
     }
 }
