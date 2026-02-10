@@ -1,5 +1,5 @@
 // Handler: AI-powered chat — auto-monitors conversations, decides whether to reply,
-// generates gen-z friendly responses using Gemini API
+// generates knowledgeable, discussion-style responses using Gemini API
 // This is a catch-all handler: it runs last, after commands and media handlers.
 
 /**
