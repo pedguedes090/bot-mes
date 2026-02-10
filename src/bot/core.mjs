@@ -104,9 +104,12 @@ export class BotCore {
                 const timeout = new Promise((_, reject) => {
                     timer = setTimeout(() => reject(new Error(`Handler '${handler.name}' timed out`)), this.#config.handlerTimeoutMs);
                 });
+                // Swallow rejections from the handler promise after timeout wins the race
+                const result = Promise.resolve(handler.handle(eventType, msg, this.#adapter));
+                result.catch(() => {});
 
                 try {
-                    await Promise.race([Promise.resolve(handler.handle(eventType, msg, this.#adapter)), timeout]);
+                    await Promise.race([result, timeout]);
                 } finally {
                     clearTimeout(timer);
                 }
