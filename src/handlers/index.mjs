@@ -5,12 +5,6 @@ import { createCommandHandler } from './command.mjs';
 import { CommandRegistry } from '../commands/registry.mjs';
 import { registerBuiltinCommands } from '../commands/definitions.mjs';
 
-// Static handlers (no dependencies)
-export const handlers = [
-    MediaHandler,  // Link detection first
-    PingHandler,   // Specific commands (legacy, bare "ping")
-];
-
 /**
  * Build the full handler list with command system enabled.
  * @param {Object} db - Database instance

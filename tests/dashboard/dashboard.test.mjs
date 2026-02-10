@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createDashboardHandler } from '../../src/dashboard/handler.mjs';
@@ -73,77 +73,76 @@ function startTestServer(handler) {
 }
 
 describe('Dashboard API', () => {
-    let server, base, db;
+    let server;
+
+    afterEach(() => {
+        if (server) {
+            try { server.close(); } catch { /* ignore */ }
+            server = null;
+        }
+    });
 
     it('GET /api/overview returns KPIs', async () => {
-        db = mockDb();
+        const db = mockDb();
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/overview`);
+        const res = await fetch(`${ctx.base}/api/overview`);
         assert.strictEqual(res.status, 200);
         const data = await res.json();
         assert.strictEqual(data.uptime_seconds, 60);
         assert.strictEqual(data.events.processed, 90);
         assert.strictEqual(data.messaging.sent, 50);
         assert.strictEqual(data.database.users, 5);
-
-        server.close();
     });
 
     it('GET /api/users returns user list', async () => {
-        db = mockDb();
+        const db = mockDb();
         db.ensureUser('u1', 'Alice');
         db.ensureUser('u2', 'Bob');
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/users?limit=10`);
+        const res = await fetch(`${ctx.base}/api/users?limit=10`);
         assert.strictEqual(res.status, 200);
         const data = await res.json();
         assert.strictEqual(data.users.length, 2);
         assert.strictEqual(data.limit, 10);
-
-        server.close();
     });
 
     it('GET /api/users/:id returns single user', async () => {
-        db = mockDb();
+        const db = mockDb();
         db.ensureUser('u1', 'Alice');
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/users/u1`);
+        const res = await fetch(`${ctx.base}/api/users/u1`);
         assert.strictEqual(res.status, 200);
         const data = await res.json();
         assert.strictEqual(data.id, 'u1');
-
-        server.close();
     });
 
     it('GET /api/users/:id returns 404 for unknown user', async () => {
-        db = mockDb();
+        const db = mockDb();
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/users/unknown`);
+        const res = await fetch(`${ctx.base}/api/users/unknown`);
         assert.strictEqual(res.status, 404);
-
-        server.close();
     });
 
     it('POST /api/users/:id/block blocks a user', async () => {
-        db = mockDb();
+        const db = mockDb();
         db.ensureUser('u1', 'Alice');
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/users/u1/block`, {
+        const res = await fetch(`${ctx.base}/api/users/u1/block`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ blocked: true }),
@@ -152,18 +151,16 @@ describe('Dashboard API', () => {
         const data = await res.json();
         assert.strictEqual(data.blocked, true);
         assert.strictEqual(db.getUser('u1').is_blocked, 1);
-
-        server.close();
     });
 
     it('POST /api/users/:id/admin grants admin', async () => {
-        db = mockDb();
+        const db = mockDb();
         db.ensureUser('u1', 'Alice');
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/users/u1/admin`, {
+        const res = await fetch(`${ctx.base}/api/users/u1/admin`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ admin: true }),
@@ -172,103 +169,87 @@ describe('Dashboard API', () => {
         const data = await res.json();
         assert.strictEqual(data.admin, true);
         assert.strictEqual(db.getUser('u1').is_admin, 1);
-
-        server.close();
     });
 
     it('GET /api/threads returns thread list', async () => {
-        db = mockDb();
+        const db = mockDb();
         db.ensureThread('t1', 'General', false);
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/threads`);
+        const res = await fetch(`${ctx.base}/api/threads`);
         assert.strictEqual(res.status, 200);
         const data = await res.json();
         assert.strictEqual(data.threads.length, 1);
-
-        server.close();
     });
 
     it('GET /api/threads/:id returns single thread', async () => {
-        db = mockDb();
+        const db = mockDb();
         db.ensureThread('t1', 'General', false);
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/threads/t1`);
+        const res = await fetch(`${ctx.base}/api/threads/t1`);
         assert.strictEqual(res.status, 200);
         const data = await res.json();
         assert.strictEqual(data.id, 't1');
-
-        server.close();
     });
 
     it('GET /api/messages requires thread parameter', async () => {
-        db = mockDb();
+        const db = mockDb();
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/messages`);
+        const res = await fetch(`${ctx.base}/api/messages`);
         assert.strictEqual(res.status, 400);
-
-        server.close();
     });
 
     it('GET /api/messages returns messages for a thread', async () => {
-        db = mockDb();
+        const db = mockDb();
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/messages?thread=t1`);
+        const res = await fetch(`${ctx.base}/api/messages?thread=t1`);
         assert.strictEqual(res.status, 200);
         const data = await res.json();
         assert.ok(Array.isArray(data.messages));
-
-        server.close();
     });
 
     it('GET /dashboard returns HTML', async () => {
-        db = mockDb();
+        const db = mockDb();
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/dashboard`);
+        const res = await fetch(`${ctx.base}/dashboard`);
         assert.strictEqual(res.status, 200);
         assert.ok(res.headers.get('content-type').includes('text/html'));
         const html = await res.text();
         assert.ok(html.includes('Bot Admin Dashboard'));
-
-        server.close();
     });
 
     it('returns 404 for unknown API routes', async () => {
-        db = mockDb();
+        const db = mockDb();
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/nonexistent`);
+        const res = await fetch(`${ctx.base}/api/nonexistent`);
         assert.strictEqual(res.status, 404);
-
-        server.close();
     });
 
     it('handles CORS preflight', async () => {
-        db = mockDb();
+        const db = mockDb();
         const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
         const ctx = await startTestServer(handler);
-        server = ctx.server; base = ctx.base;
+        server = ctx.server;
 
-        const res = await fetch(`${base}/api/overview`, { method: 'OPTIONS' });
+        const res = await fetch(`${ctx.base}/api/overview`, { method: 'OPTIONS' });
         assert.strictEqual(res.status, 204);
         assert.ok(res.headers.get('access-control-allow-origin'));
-
-        server.close();
     });
 });
