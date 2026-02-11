@@ -18,6 +18,7 @@ logger.info('Starting bot', {
     maxConcurrent: config.maxConcurrentHandlers,
     sendRate: config.sendRatePerSec,
     geminiEnabled: Boolean(config.geminiApiKey),
+    autoRestartMinutes: config.autoRestartMinutes,
 });
 
 // Start metrics/health server
@@ -84,3 +85,13 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
     logger.error('Unhandled rejection', { reason: String(reason) });
 });
+
+// Auto-restart to reclaim memory
+if (config.autoRestartMinutes > 0) {
+    const ms = config.autoRestartMinutes * 60_000;
+    const restartTimer = setTimeout(() => {
+        logger.info('Auto-restart triggered', { afterMinutes: config.autoRestartMinutes });
+        shutdown('auto-restart');
+    }, ms);
+    restartTimer.unref();
+}

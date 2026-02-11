@@ -37,6 +37,7 @@ const EDITABLE_ENV_KEYS = [
     'DEVICE_DATA_PATH',
     'GEMINI_API_KEY',
     'GEMINI_MODEL',
+    'AUTO_RESTART_MINUTES',
 ];
 
 // Keys whose values should be masked in API responses to prevent leaking secrets
@@ -109,6 +110,7 @@ export function loadConfig() {
         dbPath: env('DB_PATH', './bot.db'),
         geminiApiKey: env('GEMINI_API_KEY', ''),
         geminiModel: env('GEMINI_MODEL', 'gemini-2.0-flash'),
+        autoRestartMinutes: envInt('AUTO_RESTART_MINUTES', 60),
     });
 }
 
