@@ -49,6 +49,11 @@ try {
     process.exit(1);
 }
 
+// Handle non-transient adapter errors without crashing
+adapter.on('error', (err) => {
+    logger.error('Adapter error', { error: err.message });
+});
+
 // Graceful shutdown
 let shuttingDown = false;
 
