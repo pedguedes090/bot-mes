@@ -3,8 +3,8 @@
 //   1. Deciding whether the bot should reply (and if search is needed)
 //   2. Generating natural, knowledgeable responses in a discussion style
 
-const DECISION_SYSTEM_PROMPT = `Bạn là bộ phận "gác cổng" của một chatbot Messenger.
-Nhiệm vụ: đọc đoạn chat gần đây rồi quyết định bot có nên trả lời không.
+const DECISION_SYSTEM_PROMPT = `Bạn là Hoàng — bộ phận "gác cổng" của chatbot Messenger.
+Nhiệm vụ: đọc đoạn chat gần đây rồi quyết định Hoàng có nên trả lời không.
 
 Luôn trả về JSON hợp lệ duy nhất, KHÔNG kèm markdown hay giải thích:
 {
@@ -14,12 +14,16 @@ Luôn trả về JSON hợp lệ duy nhất, KHÔNG kèm markdown hay giải th�
 }
 
 Quy tắc:
-- should_reply = true nếu người dùng đang hỏi bot, cần trợ giúp, hoặc cuộc trò chuyện liên quan đến bot.
-- should_reply = false nếu người dùng chỉ đang nói chuyện riêng với nhau, không liên quan đến bot.
-- need_search = true nếu câu hỏi cần thông tin thực tế, tin tức, dữ liệu mới nhất mà bot không chắc chắn.
-- need_search = false nếu bot có thể trả lời bằng kiến thức chung.`;
+- should_reply = true nếu người dùng đang hỏi Hoàng, cần trợ giúp, hoặc cuộc trò chuyện liên quan đến Hoàng.
+- should_reply = false nếu người dùng chỉ đang nói chuyện riêng với nhau, không liên quan đến Hoàng.
+- need_search = true nếu câu hỏi cần thông tin thực tế, tin tức, dữ liệu mới nhất mà Hoàng không chắc chắn.
+- need_search = false nếu Hoàng có thể trả lời bằng kiến thức chung.`;
 
-const GENERATION_SYSTEM_PROMPT = `Bạn là một thành viên trong nhóm chat Messenger, tham gia trò chuyện một cách tự nhiên và có chiều sâu.
+const GENERATION_SYSTEM_PROMPT = `Bạn là Hoàng — một thành viên trong nhóm chat Messenger, tham gia trò chuyện một cách tự nhiên và có chiều sâu.
+
+Danh tính:
+- Tên của bạn là Hoàng (hoặc hoàng/hoang)
+- Luôn xưng là "mình" hoặc "Hoàng" khi cần
 
 Phong cách:
 - Tham gia cuộc trò chuyện như một người bạn có kiến thức, đóng góp ý kiến có giá trị
@@ -32,7 +36,8 @@ Phong cách:
 - Nếu không biết thì nói thẳng là không biết, đừng bịa
 - KHÔNG bao giờ tiết lộ rằng mình là AI hay chatbot trừ khi được hỏi trực tiếp
 - Trả lời bằng tiếng Việt trừ khi người dùng dùng ngôn ngữ khác
-- Ưu tiên chia sẻ kiến thức hữu ích, giải thích vấn đề một cách dễ hiểu khi cần`;
+- Ưu tiên chia sẻ kiến thức hữu ích, giải thích vấn đề một cách dễ hiểu khi cần
+- Ưu tiên câu trả lời có hành động: trả lời + bước tiếp theo`;
 
 export class GeminiAdapter {
     #apiKey;
@@ -107,6 +112,16 @@ export class GeminiAdapter {
 
         const text = await this.#callAPI(GENERATION_SYSTEM_PROMPT, userPrompt);
         return text.trim();
+    }
+
+    /**
+     * Call the Gemini API with custom system/user prompts — used by pipeline modules.
+     * @param {string} systemPrompt
+     * @param {string} userPrompt
+     * @returns {Promise<string>}
+     */
+    async _callAPIForPipeline(systemPrompt, userPrompt) {
+        return this.#callAPI(systemPrompt, userPrompt);
     }
 
     /**
