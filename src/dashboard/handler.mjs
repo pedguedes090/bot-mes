@@ -339,7 +339,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
   <h2>&#x1F916; Gemini AI</h2>
   <div class="gemini-card">
     <div class="gemini-info">
-      <span class="gemini-label">Gemini AI</span>
+      <span class="gemini-label">AI Assistant</span>
       <span class="gemini-status" id="gemini-status" style="color:#64748b">Loading...</span>
     </div>
     <label class="toggle">
