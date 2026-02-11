@@ -170,39 +170,52 @@ export class GeminiAdapter {
             },
         };
 
-        this.#logger.debug('Calling Gemini API', { model });
+        const maxRetries = 3;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            this.#logger.debug('Calling Gemini API', { model, attempt });
 
-        const startMs = Date.now();
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': this.#apiKey,
-            },
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(30_000),
-        });
-        const latencyMs = Date.now() - startMs;
-        this.#logger.debug('Gemini API response', { model, latencyMs, status: response.status });
+            const startMs = Date.now();
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': this.#apiKey,
+                },
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(30_000),
+            });
+            const latencyMs = Date.now() - startMs;
+            this.#logger.debug('Gemini API response', { model, latencyMs, status: response.status });
 
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Gemini API ${response.status}: ${errText.slice(0, 200)}`);
+            if (response.status === 503 || response.status === 429) {
+                if (attempt < maxRetries) {
+                    const delayMs = 1000 * 2 ** attempt;
+                    this.#logger.warn('Gemini API transient error, retrying', { status: response.status, attempt, delayMs });
+                    await new Promise(r => setTimeout(r, delayMs));
+                    continue;
+                }
+            }
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Gemini API ${response.status}: ${errText.slice(0, 200)}`);
+            }
+
+            const data = await response.json();
+            const candidate = data.candidates?.[0];
+            const text = candidate?.content?.parts?.[0]?.text;
+
+            if (!text) {
+                throw new Error('Empty response from Gemini');
+            }
+
+            return text;
         }
-
-        const data = await response.json();
-        const candidate = data.candidates?.[0];
-        const text = candidate?.content?.parts?.[0]?.text;
-
-        if (!text) {
-            throw new Error('Empty response from Gemini');
-        }
-
-        return text;
     }
 
     /**
      * Parse JSON from Gemini response text (strips markdown fences if present).
+     * Attempts recovery when the model returns malformed JSON.
      */
     #parseJSON(text) {
         // Strip markdown code fences
@@ -210,6 +223,33 @@ export class GeminiAdapter {
         if (cleaned.startsWith('```')) {
             cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
         }
+
+        // Fast path: try direct parse
+        try {
+            return JSON.parse(cleaned);
+        } catch {
+            // Fall through to recovery
+        }
+
+        // Recovery: extract the first top-level JSON object from the text
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}');
+        if (start !== -1 && end > start) {
+            const candidate = cleaned.slice(start, end + 1);
+            try {
+                return JSON.parse(candidate);
+            } catch {
+                // Fall through to final attempt
+            }
+
+            // Last resort: strip control characters and trailing commas
+            const sanitised = candidate
+                .replace(/[\x00-\x1f]+/g, ' ')   // replace control chars with space
+                .replace(/,\s*([}\]])/g, '$1');    // remove trailing commas
+            return JSON.parse(sanitised);
+        }
+
+        // Nothing could be recovered – throw with original text for diagnostics
         return JSON.parse(cleaned);
     }
 }
