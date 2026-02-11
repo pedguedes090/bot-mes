@@ -103,8 +103,8 @@ export class ContextLoader {
                 this.#cache.delete(key);
             }
         }
-        // If still over limit, remove oldest entries
-        if (this.#cache.size >= MAX_CACHE_ENTRIES) {
+        // If still at or over limit, remove oldest entries until under limit
+        while (this.#cache.size >= MAX_CACHE_ENTRIES) {
             let oldest = null;
             let oldestKey = null;
             for (const [key, entry] of this.#cache) {
@@ -114,6 +114,7 @@ export class ContextLoader {
                 }
             }
             if (oldestKey) this.#cache.delete(oldestKey);
+            else break;
         }
     }
 

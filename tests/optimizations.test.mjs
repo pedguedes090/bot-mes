@@ -81,8 +81,8 @@ describe('Database maintenance', () => {
     });
 });
 
-describe('Media adapter fetch timeout constant', () => {
-    it('exports downloadBuffer with timeout support', async () => {
+describe('Media adapter exports', () => {
+    it('exports downloadBuffer function', async () => {
         const { downloadBuffer } = await import('../src/adapters/media.mjs');
         assert.strictEqual(typeof downloadBuffer, 'function');
     });
