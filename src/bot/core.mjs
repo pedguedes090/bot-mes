@@ -95,6 +95,7 @@ export class BotCore {
     }
 
     async #runHandlers(eventType, msg) {
+        const msgId = msg.messageId || msg.id || '';
         for (const handler of this.#handlers) {
             try {
                 if (!handler.match(eventType, msg)) continue;
@@ -118,6 +119,7 @@ export class BotCore {
                 this.#metrics.inc('errors.handler');
                 this.#logger.error('Handler error', {
                     handler: handler.name,
+                    msgId,
                     error: err.message,
                 });
             }
@@ -140,11 +142,7 @@ export class BotCore {
     }
     async #ensureUser(userId) {
         const user = this.#db.getUser(userId);
-        if (user) {
-            // Already exists — single UPSERT updates updated_at
-            this.#db.ensureUser(userId);
-            return;
-        }
+        if (user) return;
 
         // New user: fetch info from adapter
         try {

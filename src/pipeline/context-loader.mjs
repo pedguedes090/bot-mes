@@ -94,6 +94,14 @@ export class ContextLoader {
     }
 
     /**
+     * Destroy the loader — clears cache and releases internal references.
+     * Call during graceful shutdown to assist garbage collection.
+     */
+    destroy() {
+        this.#cache.clear();
+    }
+
+    /**
      * Evict expired entries and enforce max cache size.
      */
     #evictStale() {

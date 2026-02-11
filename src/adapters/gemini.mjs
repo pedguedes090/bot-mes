@@ -172,6 +172,7 @@ export class GeminiAdapter {
 
         this.#logger.debug('Calling Gemini API', { model });
 
+        const startMs = Date.now();
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
@@ -181,6 +182,8 @@ export class GeminiAdapter {
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(30_000),
         });
+        const latencyMs = Date.now() - startMs;
+        this.#logger.debug('Gemini API response', { model, latencyMs, status: response.status });
 
         if (!response.ok) {
             const errText = await response.text();

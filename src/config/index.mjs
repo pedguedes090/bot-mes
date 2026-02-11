@@ -39,6 +39,9 @@ const EDITABLE_ENV_KEYS = [
     'GEMINI_MODEL',
 ];
 
+// Keys whose values should be masked in API responses to prevent leaking secrets
+const MASKED_ENV_KEYS = new Set(['GEMINI_API_KEY']);
+
 function env(key, fallback) {
     return process.env[key] ?? fallback;
 }
@@ -116,7 +119,8 @@ export function loadConfig() {
 export function getEditableEnv() {
     const result = {};
     for (const key of EDITABLE_ENV_KEYS) {
-        result[key] = process.env[key] ?? '';
+        const val = process.env[key] ?? '';
+        result[key] = MASKED_ENV_KEYS.has(key) && val ? '********' : val;
     }
     return result;
 }
