@@ -14,33 +14,33 @@
  * @property {number} confidence - Analysis confidence 0.0–1.0
  */
 
-const ANALYSIS_SYSTEM_PROMPT = `Bạn là Hoàng — module phân tích hội thoại.
-Nhiệm vụ: đọc đoạn chat và trả về JSON phân tích.
+const ANALYSIS_SYSTEM_PROMPT = `Bạn là module phân tích hội thoại. Đọc đoạn chat và trích xuất thông tin có cấu trúc.
 
-Luôn trả về JSON hợp lệ duy nhất, KHÔNG kèm markdown hay giải thích:
+TRẢ VỀ JSON duy nhất, KHÔNG markdown/giải thích:
 {
   "intent": "question|request|discussion|greeting|other",
   "tone": "formal|casual|mixed",
-  "questions_asked": ["..."],
-  "decisions_made": ["..."],
-  "unresolved_items": ["..."],
+  "questions_asked": ["câu hỏi chưa được trả lời"],
+  "decisions_made": ["quyết định đã đưa ra"],
+  "unresolved_items": ["vấn đề chưa giải quyết"],
   "entities": {
-    "people": ["..."],
-    "dates": ["..."],
-    "products": ["..."],
-    "numbers": ["..."]
+    "people": ["tên người được nhắc"],
+    "dates": ["ngày/giờ được nhắc"],
+    "products": ["sản phẩm/dịch vụ"],
+    "numbers": ["con số quan trọng"]
   },
-  "summary": "<tóm tắt ngắn 1-2 câu>",
+  "summary": "tóm tắt 1-2 câu",
   "confidence": 0.0-1.0
 }
 
-Quy tắc:
-- Phân tích chính xác ngữ cảnh cuộc trò chuyện
-- Xác định câu hỏi chưa được trả lời
-- Nhận diện quyết định đã được đưa ra
-- Phát hiện các mục chưa giải quyết
-- Đánh giá giọng điệu tổng thể (formal/casual/mixed)
-- Trích xuất thực thể quan trọng`;
+HƯỚNG DẪN:
+• intent: Xác định mục đích CHÍNH của tin nhắn CUỐI CÙNG (không phải toàn bộ đoạn chat)
+• questions_asked: CHỈ liệt kê câu hỏi CHƯA được ai trả lời trong đoạn chat
+• decisions_made: Những điều đã được thống nhất/quyết định
+• unresolved_items: Vấn đề đang tranh luận hoặc chưa có kết luận
+• tone: Đánh giá giọng điệu TỔNG THỂ của cuộc trò chuyện
+• entities: Chỉ trích xuất thực thể THẬT SỰ QUAN TRỌNG cho ngữ cảnh
+• confidence: 0.9+ nếu rõ ràng, 0.5-0.8 nếu mơ hồ, <0.5 nếu không đủ thông tin`;
 
 export class ConversationAnalyzer {
     #gemini;
@@ -144,9 +144,9 @@ export class ConversationAnalyzer {
      * @returns {Promise<AnalysisResult>}
      */
     async #geminiAnalysis(context) {
-        const userPrompt = `Đoạn chat cần phân tích:\n${context.formatted}\n\nHãy phân tích cuộc hội thoại này.`;
+        const userPrompt = `Đoạn chat:\n${context.formatted}\n\nPhân tích ngữ cảnh cuộc hội thoại, tập trung vào tin nhắn cuối cùng.`;
 
-        const text = await this.#gemini._callAPIForPipeline(ANALYSIS_SYSTEM_PROMPT, userPrompt);
+        const text = await this.#gemini._callAPIForPipeline(ANALYSIS_SYSTEM_PROMPT, userPrompt, { temperature: 0.3, maxOutputTokens: 512 });
         const parsed = this.#parseJSON(text);
 
         return {
