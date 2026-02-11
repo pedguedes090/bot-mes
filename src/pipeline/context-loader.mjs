@@ -5,7 +5,8 @@ const DEFAULT_MIN_MESSAGES = 30;
 const DEFAULT_MAX_MESSAGES = 50;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5-minute TTL
 const MAX_CACHE_ENTRIES = 20; // Limit cache size to prevent unbounded growth
-const MEMORY_PRESSURE_RATIO = 0.75; // Clear cache when heap exceeds 75% of heap limit
+const MEMORY_PRESSURE_RATIO = 0.75; // Clear cache when heap exceeds 75% of allocated heap
+const MEMORY_PRESSURE_COOLDOWN_MS = 30_000; // Minimum interval between pressure clears
 
 /**
  * @typedef {Object} LoadedContext
@@ -22,6 +23,7 @@ export class ContextLoader {
     #cache = new Map();
     #maxMessages;
     #minMessages;
+    #lastPressureClearAt = 0;
 
     /**
      * @param {Object} db - Database instance
@@ -60,9 +62,10 @@ export class ContextLoader {
 
         this.#metrics.inc('context_loader.cache_miss');
 
-        // Under memory pressure, clear the entire cache to help GC
-        if (this.#isMemoryPressure()) {
+        // Under memory pressure (with cooldown), clear the entire cache to help GC
+        if (this.#isMemoryPressure() && (Date.now() - this.#lastPressureClearAt) >= MEMORY_PRESSURE_COOLDOWN_MS) {
             this.#cache.clear();
+            this.#lastPressureClearAt = Date.now();
             this.#logger.debug('Context cache cleared due to memory pressure');
             this.#metrics.inc('context_loader.memory_pressure_clear');
         }
@@ -111,11 +114,12 @@ export class ContextLoader {
 
     /**
      * Check if the process is under memory pressure.
+     * Compares heapUsed against heapTotal (currently allocated heap, not the
+     * --max-old-space-size ceiling). When the ratio is high, V8 is close to
+     * requesting more memory from the OS or hitting the configured limit.
      */
     #isMemoryPressure() {
         const mem = process.memoryUsage();
-        // v8 heap size limit approximation via heapTotal growth
-        // Use a conservative ratio of heapUsed vs a fixed threshold
         return mem.heapUsed > MEMORY_PRESSURE_RATIO * mem.heapTotal;
     }
 
@@ -220,4 +224,4 @@ export class ContextLoader {
     }
 }
 
-export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES, MEMORY_PRESSURE_RATIO };
+export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES, MEMORY_PRESSURE_RATIO, MEMORY_PRESSURE_COOLDOWN_MS };
