@@ -2,9 +2,10 @@
 // Loads 30–200 messages depending on availability, with an in-memory cache.
 
 const DEFAULT_MIN_MESSAGES = 30;
-const DEFAULT_MAX_MESSAGES = 200;
+const DEFAULT_MAX_MESSAGES = 50;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5-minute TTL
-const MAX_CACHE_ENTRIES = 50; // Limit cache size to prevent unbounded growth
+const MAX_CACHE_ENTRIES = 20; // Limit cache size to prevent unbounded growth
+const MEMORY_PRESSURE_RATIO = 0.75; // Clear cache when heap exceeds 75% of heap limit
 
 /**
  * @typedef {Object} LoadedContext
@@ -59,6 +60,13 @@ export class ContextLoader {
 
         this.#metrics.inc('context_loader.cache_miss');
 
+        // Under memory pressure, clear the entire cache to help GC
+        if (this.#isMemoryPressure()) {
+            this.#cache.clear();
+            this.#logger.debug('Context cache cleared due to memory pressure');
+            this.#metrics.inc('context_loader.memory_pressure_clear');
+        }
+
         // Evict stale entries to prevent unbounded memory growth
         this.#evictStale();
 
@@ -99,6 +107,16 @@ export class ContextLoader {
      */
     destroy() {
         this.#cache.clear();
+    }
+
+    /**
+     * Check if the process is under memory pressure.
+     */
+    #isMemoryPressure() {
+        const mem = process.memoryUsage();
+        // v8 heap size limit approximation via heapTotal growth
+        // Use a conservative ratio of heapUsed vs a fixed threshold
+        return mem.heapUsed > MEMORY_PRESSURE_RATIO * mem.heapTotal;
     }
 
     /**
@@ -202,4 +220,4 @@ export class ContextLoader {
     }
 }
 
-export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES };
+export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES, MEMORY_PRESSURE_RATIO };
