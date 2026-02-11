@@ -237,8 +237,8 @@ function handleBody(req, res, handler) {
   req.on('data', chunk => {
     totalBytes += chunk.length;
     if (totalBytes > MAX_BODY_BYTES) {
-      req.destroy();
       sendJSON(res, 413, { error: 'Request body too large' });
+      req.destroy();
       return;
     }
     chunks.push(chunk);

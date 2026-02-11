@@ -51,12 +51,13 @@ export const MediaHandler = {
 
 // Download and send items one at a time to avoid holding all buffers in memory
 async function sendBatch(items, msg, adapter) {
-    for (const item of items) {
+    for (let i = 0; i < items.length; i++) {
         try {
+            const item = items[i];
             const { buffer, contentType } = await downloadBuffer(item.url);
             const isVideo = item.type === 'video' || contentType.includes('video');
             const ext = isVideo ? 'mp4' : (contentType.includes('png') ? 'png' : 'jpg');
-            const filename = `media_${Date.now()}.${ext}`;
+            const filename = `media_${Date.now()}_${i}.${ext}`;
             if (isVideo) {
                 await adapter.sendVideoDirect(msg.threadId, buffer, filename);
             } else {
