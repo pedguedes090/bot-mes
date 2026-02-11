@@ -224,18 +224,33 @@ export async function downloadBuffer(url, maxSizeMB = 25) {
         throw new Error(`Download failed: ${res.status}`);
     }
 
+    const maxBytes = maxSizeMB * 1024 * 1024;
     const contentLength = parseInt(res.headers.get('content-length') || '0');
-    if (contentLength > maxSizeMB * 1024 * 1024) {
+    if (contentLength > maxBytes) {
         // Drain body before throwing to free native memory
         await res.body?.cancel();
         throw new Error(`File too large: ${Math.round(contentLength / 1024 / 1024)}MB > ${maxSizeMB}MB`);
     }
 
-    const arrayBuffer = await res.arrayBuffer();
-    if (arrayBuffer.byteLength > maxSizeMB * 1024 * 1024) {
-        throw new Error(`File too large after download`);
+    // Stream with size enforcement to prevent OOM when content-length is absent or lying
+    const chunks = [];
+    let totalBytes = 0;
+    for await (const chunk of res.body) {
+        totalBytes += chunk.byteLength;
+        if (totalBytes > maxBytes) {
+            // Cancel remaining stream and reject
+            await res.body.cancel();
+            throw new Error(`File too large after download`);
+        }
+        chunks.push(chunk);
     }
 
     const contentType = res.headers.get('content-type') || '';
-    return { buffer: Buffer.from(arrayBuffer), contentType };
+    const combined = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return { buffer: Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength), contentType };
 }

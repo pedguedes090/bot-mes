@@ -127,4 +127,18 @@ describe('ContextLoader', () => {
         assert.strictEqual(db.getMessages.mock.callCount(), 1);
         assert.strictEqual(db.getMessages.mock.calls[0].arguments[1], 100);
     });
+
+    it('destroy clears cache', () => {
+        const db = createMockDb([{ sender_id: 'user1', text: 'test', timestamp: 1000 }]);
+        const metrics = createMetrics();
+        const loader = new ContextLoader(db, createLogger(), metrics);
+
+        loader.load('thread-1');
+        loader.destroy();
+        loader.load('thread-1'); // Should be a cache miss after destroy
+
+        const missCalls = metrics.inc.mock.calls
+            .filter(c => c.arguments[0] === 'context_loader.cache_miss');
+        assert.strictEqual(missCalls.length, 2); // initial + after destroy
+    });
 });

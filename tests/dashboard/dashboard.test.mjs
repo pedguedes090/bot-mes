@@ -378,4 +378,26 @@ describe('Dashboard API', () => {
         assert.strictEqual(data.memory.rss, 50_000_000);
         assert.strictEqual(data.memory.heap_used, 30_000_000);
     });
+
+    it('GET /api/env masks GEMINI_API_KEY value', async () => {
+        const db = mockDb();
+        const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const originalKey = process.env.GEMINI_API_KEY;
+        process.env.GEMINI_API_KEY = 'super-secret-key-12345';
+        try {
+            const res = await fetch(`${ctx.base}/api/env`);
+            assert.strictEqual(res.status, 200);
+            const data = await res.json();
+            assert.ok('GEMINI_API_KEY' in data.env);
+            // Value must be masked, not the actual key
+            assert.strictEqual(data.env.GEMINI_API_KEY, '********');
+            assert.notStrictEqual(data.env.GEMINI_API_KEY, 'super-secret-key-12345');
+        } finally {
+            if (originalKey !== undefined) process.env.GEMINI_API_KEY = originalKey;
+            else delete process.env.GEMINI_API_KEY;
+        }
+    });
 });
