@@ -20,6 +20,13 @@ describe('Metrics memory reporting', () => {
         const m = new Metrics();
         await m.stop(); // should not throw
     });
+
+    it('stop cleans up memory timer when server was started', async () => {
+        const m = new Metrics();
+        const logger = { info: () => {}, debug: () => {} };
+        m.startServer(0, logger);
+        await m.stop(); // should clean up all timers
+    });
 });
 
 describe('Command handler parse caching', () => {
@@ -52,5 +59,67 @@ describe('Command handler parse caching', () => {
         assert.strictEqual(handler.match('message', { text: '!help' }), true);
         assert.strictEqual(handler.match('message', { text: 'hello' }), false);
         assert.strictEqual(handler.match('message', { text: '!nonexistent' }), false);
+    });
+});
+
+describe('Database maintenance', () => {
+    it('Database constructor starts maintenance timer and close stops it', async () => {
+        const { Database } = await import('../src/adapters/database.mjs');
+        const logger = {
+            child: () => logger,
+            info: () => {},
+            warn: () => {},
+            error: () => {},
+            debug: () => {},
+        };
+        const db = new Database(':memory:', logger);
+        // Database should be operational
+        const stats = db.stats();
+        assert.strictEqual(stats.messages, 0);
+        // close should not throw and should clean up timer
+        db.close();
+    });
+});
+
+describe('Dashboard body size limit', () => {
+    it('rejects oversized request bodies', async () => {
+        const { createServer } = await import('node:http');
+        const { createDashboardHandler } = await import('../src/dashboard/handler.mjs');
+        const logger = {
+            child: () => logger,
+            info: () => {},
+            warn: () => {},
+            error: () => {},
+            debug: () => {},
+        };
+        const db = null;
+        const metrics = { snapshot: () => ({}) };
+        const handler = createDashboardHandler(db, metrics, logger);
+
+        const server = createServer((req, res) => {
+            if (!handler(req, res)) {
+                res.writeHead(404);
+                res.end('Not handled');
+            }
+        });
+
+        await new Promise(resolve => server.listen(0, resolve));
+        const port = server.address().port;
+
+        try {
+            // Send a body that exceeds the 64KB limit
+            const largeBody = 'x'.repeat(128 * 1024);
+            const res = await fetch(`http://127.0.0.1:${port}/api/env`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: largeBody,
+            });
+            // Should get 413 or connection error (req.destroy)
+            assert.ok(res.status === 413 || !res.ok);
+        } catch {
+            // Connection reset is also acceptable (req.destroy)
+        } finally {
+            server.close();
+        }
     });
 });

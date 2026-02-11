@@ -7,6 +7,7 @@ export class Metrics {
     #startTime = Date.now();
     #dashboardHandler = null;
     #gcTimer = null;
+    #memoryTimer = null;
 
     inc(name, delta = 1) {
         this.#counters.set(name, (this.#counters.get(name) ?? 0) + delta);
@@ -66,6 +67,17 @@ export class Metrics {
         });
         this.#server.unref(); // Don't prevent shutdown
 
+        // Periodic memory stats logging (every 5 minutes)
+        this.#memoryTimer = setInterval(() => {
+            const mem = process.memoryUsage();
+            const rssMB = Math.round(mem.rss / 1024 / 1024);
+            const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+            this.gauge('memory.rss_mb', rssMB);
+            this.gauge('memory.heap_mb', heapMB);
+            logger?.debug('Memory stats', { rss_mb: rssMB, heap_mb: heapMB });
+        }, 5 * 60 * 1000);
+        this.#memoryTimer.unref();
+
         // Periodic idle memory reclamation (every 60s)
         if (typeof global.gc === 'function') {
             this.#gcTimer = setInterval(() => {
@@ -80,6 +92,10 @@ export class Metrics {
     }
 
     async stop() {
+        if (this.#memoryTimer) {
+            clearInterval(this.#memoryTimer);
+            this.#memoryTimer = null;
+        }
         if (this.#gcTimer) {
             clearInterval(this.#gcTimer);
             this.#gcTimer = null;

@@ -49,22 +49,22 @@ export const MediaHandler = {
     },
 };
 
-// Download all items in parallel, then send rapidly (no rate-limit delay)
+// Download and send items one at a time to avoid holding all buffers in memory
 async function sendBatch(items, msg, adapter) {
-    const downloaded = (await Promise.allSettled(
-        items.map(item => downloadBuffer(item.url).then(dl => ({ ...item, ...dl })))
-    )).filter(r => r.status === 'fulfilled').map(r => r.value);
-
-    if (!downloaded.length) return;
-
-    for (const item of downloaded) {
-        const isVideo = item.type === 'video' || item.contentType.includes('video');
-        const ext = isVideo ? 'mp4' : (item.contentType.includes('png') ? 'png' : 'jpg');
-        const filename = `media_${Date.now()}.${ext}`;
-        if (isVideo) {
-            await adapter.sendVideoDirect(msg.threadId, item.buffer, filename);
-        } else {
-            await adapter.sendImageDirect(msg.threadId, item.buffer, filename);
+    for (let i = 0; i < items.length; i++) {
+        try {
+            const item = items[i];
+            const { buffer, contentType } = await downloadBuffer(item.url);
+            const isVideo = item.type === 'video' || contentType.includes('video');
+            const ext = isVideo ? 'mp4' : (contentType.includes('png') ? 'png' : 'jpg');
+            const filename = `media_${Date.now()}_${i}.${ext}`;
+            if (isVideo) {
+                await adapter.sendVideoDirect(msg.threadId, buffer, filename);
+            } else {
+                await adapter.sendImageDirect(msg.threadId, buffer, filename);
+            }
+        } catch {
+            // Skip failed items silently
         }
     }
 }

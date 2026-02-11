@@ -229,10 +229,22 @@ function clampInt(val, min, max, fallback) {
   return Math.min(Math.max(n, min), max);
 }
 
+const MAX_BODY_BYTES = 64 * 1024; // 64 KB limit for API request bodies
+
 function handleBody(req, res, handler) {
   const chunks = [];
-  req.on('data', chunk => { chunks.push(chunk); });
+  let totalBytes = 0;
+  req.on('data', chunk => {
+    totalBytes += chunk.length;
+    if (totalBytes > MAX_BODY_BYTES) {
+      sendJSON(res, 413, { error: 'Request body too large' });
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
   req.on('end', () => {
+    if (totalBytes > MAX_BODY_BYTES) return;
     try {
       const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString()) : {};
       handler(body);
