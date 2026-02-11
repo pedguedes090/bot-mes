@@ -161,7 +161,7 @@ export class MessengerAdapter extends EventEmitter {
     async sendMessage(threadId, options) {
         await this.#limiter.acquire();
         this.#metrics.inc('messages.sent');
-        return this.#client.sendMessage(threadId, options);
+        return this.#client.sendMessage(BigInt(threadId), options);
     }
 
     async sendE2EEMessage(chatJid, text, options) {
@@ -172,34 +172,34 @@ export class MessengerAdapter extends EventEmitter {
 
     async sendReaction(threadId, messageId, emoji) {
         await this.#limiter.acquire();
-        return this.#client.sendReaction(threadId, messageId, emoji);
+        return this.#client.sendReaction(BigInt(threadId), messageId, emoji);
     }
 
     async sendImage(threadId, data, filename, caption) {
         await this.#limiter.acquire();
         this.#metrics.inc('media.sent');
-        return this.#client.sendImage(threadId, data, filename, caption);
+        return this.#client.sendImage(BigInt(threadId), data, filename, caption);
     }
 
     async sendVideo(threadId, data, filename, caption) {
         await this.#limiter.acquire();
         this.#metrics.inc('media.sent');
-        return this.#client.sendVideo(threadId, data, filename, caption);
+        return this.#client.sendVideo(BigInt(threadId), data, filename, caption);
     }
 
     // No rate-limit delay — for batch sends so Messenger groups media together
     async sendImageDirect(threadId, data, filename, caption) {
         this.#metrics.inc('media.sent');
-        return this.#client.sendImage(threadId, data, filename, caption);
+        return this.#client.sendImage(BigInt(threadId), data, filename, caption);
     }
 
     async sendVideoDirect(threadId, data, filename, caption) {
         this.#metrics.inc('media.sent');
-        return this.#client.sendVideo(threadId, data, filename, caption);
+        return this.#client.sendVideo(BigInt(threadId), data, filename, caption);
     }
 
     async sendTypingIndicator(threadId, isTyping, isGroup) {
-        return this.#client.sendTypingIndicator(threadId, isTyping, isGroup);
+        return this.#client.sendTypingIndicator(BigInt(threadId), isTyping, isGroup);
     }
 
     async getUserInfo(userId) {
