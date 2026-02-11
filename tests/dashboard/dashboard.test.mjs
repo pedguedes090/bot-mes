@@ -400,4 +400,52 @@ describe('Dashboard API', () => {
             else delete process.env.GEMINI_API_KEY;
         }
     });
+
+    it('GET /api/env includes GEMINI_ENABLED key', async () => {
+        const db = mockDb();
+        const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const res = await fetch(`${ctx.base}/api/env`);
+        assert.strictEqual(res.status, 200);
+        const data = await res.json();
+        assert.ok('GEMINI_ENABLED' in data.env);
+    });
+
+    it('POST /api/env can toggle GEMINI_ENABLED', async () => {
+        const db = mockDb();
+        const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const original = process.env.GEMINI_ENABLED;
+        try {
+            const res = await fetch(`${ctx.base}/api/env`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ GEMINI_ENABLED: 'false' }),
+            });
+            assert.strictEqual(res.status, 200);
+            const data = await res.json();
+            assert.ok(data.applied.includes('GEMINI_ENABLED'));
+            assert.strictEqual(process.env.GEMINI_ENABLED, 'false');
+        } finally {
+            if (original !== undefined) process.env.GEMINI_ENABLED = original;
+            else delete process.env.GEMINI_ENABLED;
+        }
+    });
+
+    it('GET /dashboard HTML includes Gemini toggle', async () => {
+        const db = mockDb();
+        const handler = createDashboardHandler(db, mockMetrics(), mockLogger());
+        const ctx = await startTestServer(handler);
+        server = ctx.server;
+
+        const res = await fetch(`${ctx.base}/dashboard`);
+        assert.strictEqual(res.status, 200);
+        const html = await res.text();
+        assert.ok(html.includes('gemini-toggle'));
+        assert.ok(html.includes('toggleGemini'));
+    });
 });

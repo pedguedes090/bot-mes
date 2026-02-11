@@ -24,6 +24,42 @@ describe('GeminiAdapter', () => {
         assert.strictEqual(adapter.enabled, true);
     });
 
+    it('reports enabled=false when GEMINI_ENABLED env is false', () => {
+        const original = process.env.GEMINI_ENABLED;
+        process.env.GEMINI_ENABLED = 'false';
+        try {
+            const adapter = new GeminiAdapter('test-key', 'gemini-2.0-flash', createLogger());
+            assert.strictEqual(adapter.enabled, false);
+        } finally {
+            if (original !== undefined) process.env.GEMINI_ENABLED = original;
+            else delete process.env.GEMINI_ENABLED;
+        }
+    });
+
+    it('reports enabled=false when GEMINI_ENABLED env is 0', () => {
+        const original = process.env.GEMINI_ENABLED;
+        process.env.GEMINI_ENABLED = '0';
+        try {
+            const adapter = new GeminiAdapter('test-key', 'gemini-2.0-flash', createLogger());
+            assert.strictEqual(adapter.enabled, false);
+        } finally {
+            if (original !== undefined) process.env.GEMINI_ENABLED = original;
+            else delete process.env.GEMINI_ENABLED;
+        }
+    });
+
+    it('reports enabled=true when GEMINI_ENABLED env is true', () => {
+        const original = process.env.GEMINI_ENABLED;
+        process.env.GEMINI_ENABLED = 'true';
+        try {
+            const adapter = new GeminiAdapter('test-key', 'gemini-2.0-flash', createLogger());
+            assert.strictEqual(adapter.enabled, true);
+        } finally {
+            if (original !== undefined) process.env.GEMINI_ENABLED = original;
+            else delete process.env.GEMINI_ENABLED;
+        }
+    });
+
     it('decide returns should_reply=false when no API key', async () => {
         const adapter = new GeminiAdapter('', 'gemini-2.0-flash', createLogger());
         const result = await adapter.decide('Hello');
