@@ -209,6 +209,7 @@ export class MessengerAdapter extends EventEmitter {
     async disconnect() {
         if (this.#client) {
             this.#logger.info('Disconnecting');
+            this.#client.removeAllListeners();
             await this.#client.disconnect();
         }
     }

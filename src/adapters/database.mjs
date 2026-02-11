@@ -55,6 +55,7 @@ export class Database {
     #db;
     #logger;
     #stmts = {};
+    #maintenanceTimer = null;
 
     constructor(dbPath, logger) {
         this.#logger = logger.child('db');
@@ -66,6 +67,7 @@ export class Database {
         this.#db.exec('PRAGMA temp_store = MEMORY');   // Temp tables in RAM
         this.#migrate();
         this.#prepareStatements();
+        this.#startMaintenance();
         this.#logger.info('Database ready', { path: dbPath });
     }
 
@@ -245,7 +247,33 @@ export class Database {
     }
 
     close() {
+        if (this.#maintenanceTimer) {
+            clearInterval(this.#maintenanceTimer);
+            this.#maintenanceTimer = null;
+        }
         this.#db.close();
         this.#logger.info('Database closed');
+    }
+
+    // --- Maintenance ---
+
+    #startMaintenance() {
+        // Run WAL checkpoint and old message pruning every 30 minutes
+        this.#maintenanceTimer = setInterval(() => {
+            this.#runMaintenance();
+        }, 30 * 60 * 1000);
+        this.#maintenanceTimer.unref();
+    }
+
+    #runMaintenance() {
+        try {
+            // Checkpoint WAL to prevent unbounded WAL file growth (reclaims RSS)
+            this.#db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+            // Prune messages older than 7 days to prevent unbounded DB growth
+            this.#db.exec("DELETE FROM messages WHERE timestamp < (strftime('%s','now','-7 days') * 1000)");
+            this.#logger.debug('Database maintenance completed');
+        } catch (err) {
+            this.#logger.warn('Database maintenance error', { error: err.message });
+        }
     }
 }
