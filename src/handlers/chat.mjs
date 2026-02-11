@@ -1,15 +1,36 @@
 // Handler: AI-powered chat — auto-monitors conversations, decides whether to reply,
-// generates knowledgeable, discussion-style responses using Gemini API
+// generates knowledgeable, discussion-style responses using Gemini API with
+// the full pipeline: ThreadResolver → ContextLoader → ConversationAnalyzer →
+// ReplyPlanner → MessageComposer → SafetyGate
+// Bot identity: Hoàng
 // This is a catch-all handler: it runs last, after commands and media handlers.
 
+import { ThreadResolver } from '../pipeline/thread-resolver.mjs';
+import { ContextLoader } from '../pipeline/context-loader.mjs';
+import { ConversationAnalyzer } from '../pipeline/conversation-analyzer.mjs';
+import { ReplyPlanner } from '../pipeline/reply-planner.mjs';
+import { MessageComposer } from '../pipeline/message-composer.mjs';
+import { SafetyGate } from '../pipeline/safety-gate.mjs';
+
 /**
- * Create the AI chat handler.
+ * Create the AI chat handler with the full analysis pipeline.
  * @param {import('../adapters/gemini.mjs').GeminiAdapter} gemini
  * @param {Object} db - Database instance
  * @param {Object} metrics - Metrics instance
+ * @param {Object} logger - Logger instance
  * @returns {Object} handler
  */
-export function createChatHandler(gemini, db, metrics) {
+export function createChatHandler(gemini, db, metrics, logger) {
+    // Provide a default logger if none supplied (backward compatibility)
+    const log = logger || { child: () => ({ debug() {}, info() {}, warn() {}, error() {} }) };
+
+    const threadResolver = new ThreadResolver(db, log, metrics);
+    const contextLoader = new ContextLoader(db, log, metrics);
+    const conversationAnalyzer = new ConversationAnalyzer(gemini, log, metrics);
+    const replyPlanner = new ReplyPlanner(log, metrics);
+    const messageComposer = new MessageComposer(gemini, log, metrics);
+    const safetyGate = new SafetyGate(log, metrics);
+
     return {
         name: 'ai-chat',
 
@@ -20,14 +41,32 @@ export function createChatHandler(gemini, db, metrics) {
         },
 
         async handle(eventType, msg, adapter) {
-            const threadId = String(msg.threadId || msg.chatJid || '');
+            const currentThreadId = String(msg.threadId || msg.chatJid || '');
             const text = msg.text.trim();
+            const senderId = msg.senderId;
 
-            // 1. Build chat context from recent messages
-            const chatContext = buildChatContext(db, threadId, text, msg.senderId);
+            // 1. Resolve target thread
+            const resolution = threadResolver.resolve(currentThreadId, text, senderId);
+            metrics.gauge('thread_resolution_confidence', resolution.confidence);
 
-            // 2. Ask Gemini: should we reply?
-            const decision = await gemini.decide(chatContext);
+            // If disambiguation needed, send the prompt back to the user
+            if (!resolution.threadId && resolution.disambiguationPrompt) {
+                if (eventType === 'e2eeMessage') {
+                    await adapter.sendE2EEMessage(msg.chatJid, resolution.disambiguationPrompt);
+                } else {
+                    await adapter.sendMessage(msg.threadId, resolution.disambiguationPrompt);
+                }
+                return;
+            }
+
+            const targetThreadId = resolution.threadId || currentThreadId;
+
+            // 2. Load conversation context (30–200 messages)
+            const context = contextLoader.load(targetThreadId, text, senderId);
+            metrics.gauge('context_window_size', context.messageCount);
+
+            // 3. Ask Gemini: should we reply?
+            const decision = await gemini.decide(context.formatted);
             metrics.inc('ai.decisions');
 
             if (!decision.should_reply) {
@@ -35,37 +74,63 @@ export function createChatHandler(gemini, db, metrics) {
                 return;
             }
 
-            // 3. (Optional) Search context — placeholder for future search integration
+            // 4. Analyze conversation
+            const analysis = await conversationAnalyzer.analyze(context);
+
+            // 5. Plan the reply
+            const plan = replyPlanner.plan(analysis, decision, text);
+
+            // 6. (Optional) Search context — placeholder for future search integration
             let searchContext = null;
             if (decision.need_search) {
                 metrics.inc('ai.searches');
-                // Future: implement web search / knowledge base query
                 searchContext = null;
             }
 
-            // 4. Generate reply
-            const reply = await gemini.generateReply(chatContext, searchContext);
+            // 7. Compose message
+            let reply;
+            try {
+                reply = await messageComposer.compose(plan, context, searchContext);
+            } catch {
+                // Fallback to direct Gemini generation
+                reply = await gemini.generateReply(context.formatted, searchContext);
+            }
             metrics.inc('ai.replies');
 
-            // 5. Send reply to the correct thread
+            // 8. Safety check
+            const safety = safetyGate.check(reply);
+            if (!safety.allowed) {
+                metrics.inc('safety_blocks_count');
+                if (safety.safeAlternative) {
+                    reply = safety.safeAlternative;
+                } else {
+                    return; // Block silently
+                }
+            }
+
+            // 9. Send reply to the correct thread
             if (eventType === 'e2eeMessage') {
                 await adapter.sendE2EEMessage(msg.chatJid, reply);
             } else {
-                await adapter.sendMessage(msg.threadId, reply);
+                await adapter.sendMessage(targetThreadId, reply);
             }
+
+            // Invalidate context cache after sending (context changed)
+            contextLoader.invalidate(targetThreadId);
         },
     };
 }
 
 /**
  * Build a chat context string from recent DB messages + current message.
+ * Retained for backward compatibility.
  * @param {Object} db
  * @param {string} threadId
  * @param {string} currentText
  * @param {string} senderId
  * @returns {string}
  */
-function buildChatContext(db, threadId, currentText, senderId) {
+export function buildChatContext(db, threadId, currentText, senderId) {
     const lines = [];
 
     if (db && threadId) {

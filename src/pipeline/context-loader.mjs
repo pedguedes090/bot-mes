@@ -1,0 +1,163 @@
+// ContextLoader — fetches and formats conversation history for a thread
+// Loads 30–200 messages depending on availability, with an in-memory cache.
+
+const DEFAULT_MIN_MESSAGES = 30;
+const DEFAULT_MAX_MESSAGES = 200;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5-minute TTL
+
+/**
+ * @typedef {Object} LoadedContext
+ * @property {string} threadId
+ * @property {Array<{senderId: string, text: string, timestamp: number}>} messages
+ * @property {number} messageCount
+ * @property {string} formatted - Pre-formatted chat string for prompts
+ */
+
+export class ContextLoader {
+    #db;
+    #logger;
+    #metrics;
+    #cache = new Map();
+    #maxMessages;
+    #minMessages;
+
+    /**
+     * @param {Object} db - Database instance
+     * @param {Object} logger - Logger instance
+     * @param {Object} metrics - Metrics instance
+     * @param {Object} [options]
+     * @param {number} [options.minMessages=30]
+     * @param {number} [options.maxMessages=200]
+     */
+    constructor(db, logger, metrics, options = {}) {
+        this.#db = db;
+        this.#logger = logger.child('context-loader');
+        this.#metrics = metrics;
+        this.#minMessages = options.minMessages ?? DEFAULT_MIN_MESSAGES;
+        this.#maxMessages = options.maxMessages ?? DEFAULT_MAX_MESSAGES;
+    }
+
+    /**
+     * Load conversation context for a thread.
+     * @param {string} threadId
+     * @param {string} [currentText] - Current message to append
+     * @param {string} [senderId] - Current sender ID
+     * @returns {LoadedContext}
+     */
+    load(threadId, currentText, senderId) {
+        // Check cache
+        const cached = this.#cache.get(threadId);
+        if (cached && (Date.now() - cached.loadedAt) < CACHE_TTL_MS) {
+            this.#metrics.inc('context_loader.cache_hit');
+            // Append current message to cached context
+            if (currentText) {
+                return this.#appendCurrent(cached.context, currentText, senderId);
+            }
+            return cached.context;
+        }
+
+        this.#metrics.inc('context_loader.cache_miss');
+        const context = this.#loadFromDb(threadId, currentText, senderId);
+
+        // Cache the result (without the current appended message)
+        this.#cache.set(threadId, {
+            context: this.#loadFromDb(threadId),
+            loadedAt: Date.now(),
+        });
+
+        this.#metrics.gauge('context_window_size', context.messageCount);
+        return context;
+    }
+
+    /**
+     * Invalidate cache for a thread (e.g. after sending a message).
+     * @param {string} threadId
+     */
+    invalidate(threadId) {
+        this.#cache.delete(threadId);
+    }
+
+    /**
+     * Clear the entire cache.
+     */
+    clearCache() {
+        this.#cache.clear();
+    }
+
+    /**
+     * Load messages from the database.
+     * @param {string} threadId
+     * @param {string} [currentText]
+     * @param {string} [senderId]
+     * @returns {LoadedContext}
+     */
+    #loadFromDb(threadId, currentText, senderId) {
+        const messages = [];
+
+        if (this.#db && threadId) {
+            try {
+                const raw = this.#db.getMessages(threadId, this.#maxMessages);
+                // Messages come newest-first; reverse for chronological order
+                for (let i = raw.length - 1; i >= 0; i--) {
+                    const m = raw[i];
+                    if (m.text) {
+                        messages.push({
+                            senderId: m.sender_id || 'unknown',
+                            text: m.text,
+                            timestamp: m.timestamp || 0,
+                        });
+                    }
+                }
+            } catch (err) {
+                this.#logger.error('Failed to load messages from DB', { error: err.message });
+            }
+        }
+
+        // Append current message
+        if (currentText) {
+            messages.push({
+                senderId: senderId || 'user',
+                text: currentText,
+                timestamp: Date.now(),
+            });
+        }
+
+        const formatted = messages
+            .map(m => `[${m.senderId}]: ${m.text}`)
+            .join('\n');
+
+        this.#logger.debug('Context loaded', {
+            threadId,
+            messageCount: messages.length,
+        });
+
+        return {
+            threadId,
+            messages,
+            messageCount: messages.length,
+            formatted,
+        };
+    }
+
+    /**
+     * Append current message to an existing context.
+     */
+    #appendCurrent(context, currentText, senderId) {
+        const newMessages = [
+            ...context.messages,
+            { senderId: senderId || 'user', text: currentText, timestamp: Date.now() },
+        ];
+        const formatted = newMessages
+            .map(m => `[${m.senderId}]: ${m.text}`)
+            .join('\n');
+
+        return {
+            threadId: context.threadId,
+            messages: newMessages,
+            messageCount: newMessages.length,
+            formatted,
+        };
+    }
+}
+
+export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS };

@@ -11,9 +11,10 @@ import { registerBuiltinCommands } from '../commands/definitions.mjs';
  * @param {Object} db - Database instance
  * @param {Object} metrics - Metrics instance
  * @param {import('../adapters/gemini.mjs').GeminiAdapter} [gemini] - Gemini adapter
+ * @param {Object} [logger] - Logger instance
  * @returns {{ handlers: Object[], registry: import('../commands/registry.mjs').CommandRegistry }}
  */
-export function buildHandlers(db, metrics, gemini) {
+export function buildHandlers(db, metrics, gemini, logger) {
     const registry = new CommandRegistry();
     registerBuiltinCommands(registry);
 
@@ -27,7 +28,7 @@ export function buildHandlers(db, metrics, gemini) {
 
     // AI chat handler is last — catch-all for unhandled text messages
     if (gemini) {
-        handlers.push(createChatHandler(gemini, db, metrics));
+        handlers.push(createChatHandler(gemini, db, metrics, logger));
     }
 
     return {

@@ -8,16 +8,18 @@ function createMockGemini({ enabled = true, shouldReply = true, needSearch = fal
         get enabled() { return enabled; },
         decide: mock.fn(async () => ({ should_reply: shouldReply, need_search: needSearch, reason: 'test' })),
         generateReply: mock.fn(async () => reply),
+        _callAPIForPipeline: mock.fn(async () => reply),
     };
 }
 
 function createMockMetrics() {
-    return { inc: mock.fn() };
+    return { inc: mock.fn(), gauge: mock.fn() };
 }
 
 function createMockDb(messages = []) {
     return {
         getMessages: mock.fn(() => messages),
+        listThreads: mock.fn(() => []),
     };
 }
 
@@ -61,7 +63,8 @@ describe('AI Chat Handler', () => {
         await handler.handle('message', { threadId: '456', text: 'hey bot', senderId: 'user1' }, adapter);
 
         assert.strictEqual(gemini.decide.mock.callCount(), 1);
-        assert.strictEqual(gemini.generateReply.mock.callCount(), 1);
+        // Reply is now composed via the pipeline (_callAPIForPipeline)
+        assert.strictEqual(gemini._callAPIForPipeline.mock.callCount() >= 1, true);
         assert.strictEqual(adapter.sendMessage.mock.callCount(), 1);
         assert.strictEqual(adapter.sendMessage.mock.calls[0].arguments[0], '456');
         assert.strictEqual(adapter.sendMessage.mock.calls[0].arguments[1], 'oke bro 👌');

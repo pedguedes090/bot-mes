@@ -34,7 +34,7 @@ const dashboardHandler = createDashboardHandler(db, metrics, logger);
 metrics.setDashboardHandler(dashboardHandler);
 
 // Build handlers with command system and AI chat
-const { handlers } = buildHandlers(db, metrics, gemini);
+const { handlers } = buildHandlers(db, metrics, gemini, logger);
 
 // Create adapter and bot core
 const adapter = new MessengerAdapter(config, logger, metrics);
