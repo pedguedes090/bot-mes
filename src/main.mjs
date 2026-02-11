@@ -88,7 +88,8 @@ process.on('unhandledRejection', (reason) => {
 
 // Auto-restart to reclaim memory
 if (config.autoRestartMinutes > 0) {
-    const ms = config.autoRestartMinutes * 60_000;
+    const MAX_TIMEOUT_MS = 2_147_483_647; // setTimeout limit
+    const ms = Math.min(config.autoRestartMinutes * 60_000, MAX_TIMEOUT_MS);
     const restartTimer = setTimeout(() => {
         logger.info('Auto-restart triggered', { afterMinutes: config.autoRestartMinutes });
         shutdown('auto-restart');
