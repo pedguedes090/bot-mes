@@ -211,6 +211,9 @@ export class GeminiAdapter {
 
             return text;
         }
+
+        /* istanbul ignore next — loop always returns or throws, but guard against unexpected fall-through */
+        throw new Error('Gemini API request failed after retries');
     }
 
     /**

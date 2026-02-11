@@ -106,8 +106,8 @@ describe('GeminiAdapter', () => {
 
     it('decide parses JSON with control characters in values', async () => {
         const originalFetch = globalThis.fetch;
-        // Simulate a JSON string with a literal newline inside a value (invalid JSON)
-        const malformed = '{"should_reply":true,"need_search":false,"reason":"line1\nline2"}';
+        // Build a JSON string with an actual unescaped newline inside a value (invalid JSON)
+        const malformed = '{"should_reply":true,"need_search":false,"reason":"line1' + String.fromCharCode(10) + 'line2"}';
         globalThis.fetch = async () => ({
             ok: true,
             json: async () => ({
