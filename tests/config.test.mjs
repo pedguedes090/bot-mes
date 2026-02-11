@@ -30,12 +30,14 @@ describe('loadConfig', () => {
         assert.strictEqual(cfg.handlerTimeoutMs, 30_000);
         assert.strictEqual(cfg.sendRatePerSec, 5);
         assert.strictEqual(cfg.metricsPort, 9090);
+        assert.strictEqual(cfg.autoRestartMinutes, 60);
     });
 
     it('respects env overrides', async () => {
         process.env.LOG_LEVEL = 'debug';
         process.env.MAX_CONCURRENT_HANDLERS = '20';
         process.env.ENABLE_E2EE = 'false';
+        process.env.AUTO_RESTART_MINUTES = '120';
 
         // Dynamic import to re-run module
         const mod = await import(`../src/config/index.mjs?t=${Date.now()}`);
@@ -44,6 +46,7 @@ describe('loadConfig', () => {
         assert.strictEqual(cfg.logLevel, 'debug');
         assert.strictEqual(cfg.maxConcurrentHandlers, 20);
         assert.strictEqual(cfg.enableE2EE, false);
+        assert.strictEqual(cfg.autoRestartMinutes, 120);
     });
 
     it('throws on missing required cookies', async () => {
