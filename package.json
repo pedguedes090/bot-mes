@@ -13,6 +13,6 @@
         "node": ">=22.12.0"
     },
     "dependencies": {
-        "meta-messenger.js": "^1.1.1"
+        "meta-messenger.js": "file:packages/meta-messenger.js"
     }
 }
