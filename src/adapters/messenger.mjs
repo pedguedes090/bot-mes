@@ -46,6 +46,18 @@ export class MessengerAdapter extends EventEmitter {
     #reconnectAttempts = 0;
     #maxReconnectDelay = 60_000;
 
+    static #TRANSIENT_PATTERNS = [
+        'websocket close 1006',
+        'unexpected eof',
+        'connection reset',
+        'econnreset',
+        'epipe',
+        'etimedout',
+        'econnrefused',
+        'socket hang up',
+        'network changed',
+    ];
+
     constructor(config, logger, metrics) {
         super();
         this.#config = config;
@@ -120,6 +132,11 @@ export class MessengerAdapter extends EventEmitter {
 
         c.on('error', (err) => {
             this.#metrics.inc('errors.total');
+            if (this.#isTransient(err)) {
+                this.#reconnectAttempts++;
+                this.#logger.warn('Transient connection error (attempt ' + this.#reconnectAttempts + ')', { error: err.message });
+                return;
+            }
             this.#logger.error('Client error', { error: err.message });
             this.emit('error', err);
         });
@@ -133,6 +150,11 @@ export class MessengerAdapter extends EventEmitter {
                 this.#logger.warn('Failed to save device data', { error: e.message });
             }
         });
+    }
+
+    #isTransient(err) {
+        const msg = (err.message || '').toLowerCase();
+        return MessengerAdapter.#TRANSIENT_PATTERNS.some(p => msg.includes(p));
     }
 
     // Rate-limited send
