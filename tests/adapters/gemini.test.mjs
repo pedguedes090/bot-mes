@@ -86,6 +86,105 @@ describe('GeminiAdapter', () => {
         }
     });
 
+    it('decide parses JSON with extra text around the object', async () => {
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => ({
+            ok: true,
+            json: async () => ({
+                candidates: [{ content: { parts: [{ text: 'Here is the result:\n{"should_reply":true,"need_search":false,"reason":"test"}\nDone.' }] } }],
+            }),
+        });
+        try {
+            const adapter = new GeminiAdapter('key', 'gemini-2.0-flash', createLogger());
+            const result = await adapter.decide('Hello');
+            assert.strictEqual(result.should_reply, true);
+            assert.strictEqual(result.reason, 'test');
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it('decide parses JSON with control characters in values', async () => {
+        const originalFetch = globalThis.fetch;
+        // Build a JSON string with an actual unescaped newline inside a value (invalid JSON)
+        const malformed = '{"should_reply":true,"need_search":false,"reason":"line1' + String.fromCharCode(10) + 'line2"}';
+        globalThis.fetch = async () => ({
+            ok: true,
+            json: async () => ({
+                candidates: [{ content: { parts: [{ text: malformed }] } }],
+            }),
+        });
+        try {
+            const adapter = new GeminiAdapter('key', 'gemini-2.0-flash', createLogger());
+            const result = await adapter.decide('Hello');
+            assert.strictEqual(result.should_reply, true);
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it('decide parses JSON with trailing comma', async () => {
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => ({
+            ok: true,
+            json: async () => ({
+                candidates: [{ content: { parts: [{ text: '{"should_reply":true,"need_search":false,"reason":"test",}' }] } }],
+            }),
+        });
+        try {
+            const adapter = new GeminiAdapter('key', 'gemini-2.0-flash', createLogger());
+            const result = await adapter.decide('Hello');
+            assert.strictEqual(result.should_reply, true);
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it('retries on 503 and succeeds on next attempt', async () => {
+        const originalFetch = globalThis.fetch;
+        let callCount = 0;
+        globalThis.fetch = async () => {
+            callCount++;
+            if (callCount === 1) {
+                return { ok: false, status: 503, text: async () => 'Unavailable' };
+            }
+            return {
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    candidates: [{ content: { parts: [{ text: '{"should_reply":true,"need_search":false,"reason":"retry worked"}' }] } }],
+                }),
+            };
+        };
+        try {
+            const adapter = new GeminiAdapter('key', 'gemini-2.0-flash', createLogger());
+            const result = await adapter.decide('Hello');
+            assert.strictEqual(result.should_reply, true);
+            assert.strictEqual(result.reason, 'retry worked');
+            assert.strictEqual(callCount, 2);
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
+    it('retries on 429 and gives up after max retries', async () => {
+        const originalFetch = globalThis.fetch;
+        let callCount = 0;
+        globalThis.fetch = async () => {
+            callCount++;
+            return { ok: false, status: 429, text: async () => 'Rate limited' };
+        };
+        try {
+            const adapter = new GeminiAdapter('key', 'gemini-2.0-flash', createLogger());
+            const result = await adapter.decide('Hello');
+            // decide catches errors and returns fallback
+            assert.strictEqual(result.should_reply, false);
+            assert.strictEqual(callCount, 4); // 1 initial + 3 retries
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
+
     it('sends correct request body structure to Gemini API', async () => {
         const originalFetch = globalThis.fetch;
         let capturedBody;

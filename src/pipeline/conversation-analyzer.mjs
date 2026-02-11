@@ -168,12 +168,36 @@ export class ConversationAnalyzer {
 
     /**
      * Parse JSON from Gemini response (strips markdown fences).
+     * Attempts recovery when the model returns malformed JSON.
      */
     #parseJSON(text) {
         let cleaned = text.trim();
         if (cleaned.startsWith('```')) {
             cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
         }
+
+        try {
+            return JSON.parse(cleaned);
+        } catch {
+            // Fall through to recovery
+        }
+
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}');
+        if (start !== -1 && end > start) {
+            const candidate = cleaned.slice(start, end + 1);
+            try {
+                return JSON.parse(candidate);
+            } catch {
+                // Fall through to final attempt
+            }
+
+            const sanitised = candidate
+                .replace(/[\x00-\x1f]+/g, ' ')
+                .replace(/,\s*([}\]])/g, '$1');
+            return JSON.parse(sanitised);
+        }
+
         return JSON.parse(cleaned);
     }
 }
