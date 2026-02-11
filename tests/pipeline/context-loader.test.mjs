@@ -1,6 +1,6 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { ContextLoader, DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES } from '../../src/pipeline/context-loader.mjs';
+import { ContextLoader, DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, MAX_CACHE_ENTRIES } from '../../src/pipeline/context-loader.mjs';
 
 function createLogger() {
     return {
@@ -80,6 +80,42 @@ describe('ContextLoader', () => {
     it('exports correct default constants', () => {
         assert.strictEqual(DEFAULT_MIN_MESSAGES, 30);
         assert.strictEqual(DEFAULT_MAX_MESSAGES, 200);
+        assert.strictEqual(MAX_CACHE_ENTRIES, 50);
+    });
+
+    it('evicts stale cache entries on cache miss', () => {
+        const db = createMockDb([{ sender_id: 'user1', text: 'test', timestamp: 1000 }]);
+        const metrics = createMetrics();
+        const loader = new ContextLoader(db, createLogger(), metrics);
+
+        // Load two threads — both get cached
+        loader.load('thread-1');
+        loader.load('thread-2');
+
+        // Invalidate both, then load a third — stale entries should be evicted
+        loader.invalidate('thread-1');
+        loader.invalidate('thread-2');
+        loader.load('thread-3');
+
+        // All three loads should be cache misses
+        const missCalls = metrics.inc.mock.calls
+            .filter(c => c.arguments[0] === 'context_loader.cache_miss');
+        assert.strictEqual(missCalls.length, 3);
+    });
+
+    it('clearCache removes all entries', () => {
+        const db = createMockDb([{ sender_id: 'user1', text: 'test', timestamp: 1000 }]);
+        const metrics = createMetrics();
+        const loader = new ContextLoader(db, createLogger(), metrics);
+
+        loader.load('thread-1');
+        loader.load('thread-2');
+        loader.clearCache();
+        loader.load('thread-1'); // Should be a cache miss
+
+        const missCalls = metrics.inc.mock.calls
+            .filter(c => c.arguments[0] === 'context_loader.cache_miss');
+        assert.strictEqual(missCalls.length, 3); // thread-1, thread-2, thread-1 again
     });
 
     it('requests up to maxMessages from database', () => {

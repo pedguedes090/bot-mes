@@ -4,6 +4,7 @@
 const DEFAULT_MIN_MESSAGES = 30;
 const DEFAULT_MAX_MESSAGES = 200;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5-minute TTL
+const MAX_CACHE_ENTRIES = 50; // Limit cache size to prevent unbounded growth
 
 /**
  * @typedef {Object} LoadedContext
@@ -58,6 +59,9 @@ export class ContextLoader {
 
         this.#metrics.inc('context_loader.cache_miss');
 
+        // Evict stale entries to prevent unbounded memory growth
+        this.#evictStale();
+
         // Load base context (without current message) for caching
         const baseContext = this.#loadFromDb(threadId);
         this.#cache.set(threadId, {
@@ -87,6 +91,30 @@ export class ContextLoader {
      */
     clearCache() {
         this.#cache.clear();
+    }
+
+    /**
+     * Evict expired entries and enforce max cache size.
+     */
+    #evictStale() {
+        const now = Date.now();
+        for (const [key, entry] of this.#cache) {
+            if ((now - entry.loadedAt) >= CACHE_TTL_MS) {
+                this.#cache.delete(key);
+            }
+        }
+        // If still over limit, remove oldest entries
+        if (this.#cache.size >= MAX_CACHE_ENTRIES) {
+            let oldest = null;
+            let oldestKey = null;
+            for (const [key, entry] of this.#cache) {
+                if (!oldest || entry.loadedAt < oldest) {
+                    oldest = entry.loadedAt;
+                    oldestKey = key;
+                }
+            }
+            if (oldestKey) this.#cache.delete(oldestKey);
+        }
     }
 
     /**
@@ -165,4 +193,4 @@ export class ContextLoader {
     }
 }
 
-export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS };
+export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES };

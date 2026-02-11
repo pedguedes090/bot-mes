@@ -179,6 +179,7 @@ export class GeminiAdapter {
                 'x-goog-api-key': this.#apiKey,
             },
             body: JSON.stringify(body),
+            signal: AbortSignal.timeout(30_000),
         });
 
         if (!response.ok) {

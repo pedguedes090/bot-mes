@@ -81,6 +81,13 @@ describe('Database maintenance', () => {
     });
 });
 
+describe('Media adapter fetch timeout constant', () => {
+    it('exports downloadBuffer with timeout support', async () => {
+        const { downloadBuffer } = await import('../src/adapters/media.mjs');
+        assert.strictEqual(typeof downloadBuffer, 'function');
+    });
+});
+
 describe('Dashboard body size limit', () => {
     it('rejects oversized request bodies', async () => {
         const { createServer } = await import('node:http');

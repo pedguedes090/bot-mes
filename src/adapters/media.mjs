@@ -2,13 +2,19 @@
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// Default timeout for fetch requests (30 seconds)
+const FETCH_TIMEOUT_MS = 30_000;
+
 // --- Instagram ---
 
 async function getCSRFToken() {
     const res = await fetch('https://www.instagram.com/', {
         headers: { 'User-Agent': USER_AGENT },
         redirect: 'follow',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
+    // Drain the response body to free native memory (we only need headers)
+    await res.body?.cancel();
     const setCookie = res.headers.get('set-cookie') || '';
     const match = setCookie.match(/csrftoken=([^;]+)/);
     if (!match) throw new Error('CSRF token not found');
@@ -25,7 +31,13 @@ function getShortcode(url) {
 
 async function checkRedirect(url) {
     if (url.includes('/share')) {
-        const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': USER_AGENT } });
+        const res = await fetch(url, {
+            redirect: 'follow',
+            headers: { 'User-Agent': USER_AGENT },
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        // Drain the response body to free native memory (we only need the final URL)
+        await res.body?.cancel();
         return res.url;
     }
     return url;
@@ -54,15 +66,22 @@ export async function getInstagramMedia(url, retries = 3) {
             'User-Agent': USER_AGENT,
         },
         body: body.toString(),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if ((res.status === 429 || res.status === 403) && retries > 0) {
+        // Drain the response body to free native memory before retry
+        await res.body?.cancel();
         const wait = parseInt(res.headers.get('retry-after') || '2') * 1000;
         await new Promise(r => setTimeout(r, wait));
         return getInstagramMedia(url, retries - 1);
     }
 
-    if (!res.ok) throw new Error(`Instagram HTTP ${res.status}`);
+    if (!res.ok) {
+        // Drain the response body to free native memory
+        await res.body?.cancel();
+        throw new Error(`Instagram HTTP ${res.status}`);
+    }
     const json = await res.json();
     const media = json.data?.xdt_shortcode_media;
     if (!media) throw new Error('No media found');
@@ -103,8 +122,16 @@ const FB_HEADERS = {
 };
 
 export async function getFacebookVideo(videoUrl) {
-    const res = await fetch(videoUrl, { headers: FB_HEADERS, redirect: 'follow' });
-    if (!res.ok) throw new Error(`Facebook HTTP ${res.status}`);
+    const res = await fetch(videoUrl, {
+        headers: FB_HEADERS,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+        // Drain the response body to free native memory
+        await res.body?.cancel();
+        throw new Error(`Facebook HTTP ${res.status}`);
+    }
 
     let data = await res.text();
     data = data.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
@@ -136,7 +163,10 @@ async function resolveTikTokUrl(url) {
     const res = await fetch(url, {
         redirect: 'follow',
         headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
+    // Drain the response body to free native memory (we only need the final URL)
+    await res.body?.cancel();
     return res.url;
 }
 
@@ -153,8 +183,13 @@ export async function getTikTokMedia(shortUrl) {
     const res = await fetch(`${TIKTOK_API}?aweme_id=${awemeId}`, {
         method: 'OPTIONS',
         headers: { 'User-Agent': TIKTOK_UA },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (!res.ok) throw new Error(`TikTok API HTTP ${res.status}`);
+    if (!res.ok) {
+        // Drain the response body to free native memory
+        await res.body?.cancel();
+        throw new Error(`TikTok API HTTP ${res.status}`);
+    }
 
     const json = await res.json();
     const aweme = json.aweme_list?.[0];
@@ -181,11 +216,18 @@ export async function downloadBuffer(url, maxSizeMB = 25) {
     const res = await fetch(url, {
         headers: { 'User-Agent': USER_AGENT },
         redirect: 'follow',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+    if (!res.ok) {
+        // Drain the response body to free native memory
+        await res.body?.cancel();
+        throw new Error(`Download failed: ${res.status}`);
+    }
 
     const contentLength = parseInt(res.headers.get('content-length') || '0');
     if (contentLength > maxSizeMB * 1024 * 1024) {
+        // Drain body before throwing to free native memory
+        await res.body?.cancel();
         throw new Error(`File too large: ${Math.round(contentLength / 1024 / 1024)}MB > ${maxSizeMB}MB`);
     }
 
