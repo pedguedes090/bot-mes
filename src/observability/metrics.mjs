@@ -82,9 +82,11 @@ export class Metrics {
         if (typeof global.gc === 'function') {
             this.#gcTimer = setInterval(() => {
                 const active = this.#gauges.get('handlers.active') ?? 0;
-                if (active === 0) {
+                const mem = process.memoryUsage();
+                const heapPressure = mem.heapUsed > 0.75 * mem.heapTotal;
+                if (active === 0 || heapPressure) {
                     global.gc();
-                    logger?.debug('Idle GC triggered');
+                    logger?.debug('GC triggered', { idle: active === 0, heapPressure });
                 }
             }, 60_000);
             this.#gcTimer.unref();
