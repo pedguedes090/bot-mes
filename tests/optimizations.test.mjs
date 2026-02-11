@@ -81,6 +81,13 @@ describe('Database maintenance', () => {
     });
 });
 
+describe('Media adapter exports', () => {
+    it('exports downloadBuffer function', async () => {
+        const { downloadBuffer } = await import('../src/adapters/media.mjs');
+        assert.strictEqual(typeof downloadBuffer, 'function');
+    });
+});
+
 describe('Dashboard body size limit', () => {
     it('rejects oversized request bodies', async () => {
         const { createServer } = await import('node:http');
