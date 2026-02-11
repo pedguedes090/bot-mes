@@ -74,6 +74,8 @@ export class GeminiAdapter {
     }
 
     get enabled() {
+        const envFlag = process.env.GEMINI_ENABLED;
+        if (envFlag === 'false' || envFlag === '0') return false;
         return Boolean(this.#apiKey);
     }
 

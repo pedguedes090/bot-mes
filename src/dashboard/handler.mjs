@@ -300,6 +300,17 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
   .save-btn:hover { background: #047857; }
   .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   #env-status { font-size: 0.8rem; margin-left: 0.75rem; }
+  .gemini-card { background: #1e293b; border-radius: 8px; padding: 1rem; margin-top: 0.5rem; display: flex; align-items: center; justify-content: space-between; }
+  .gemini-info { display: flex; align-items: center; gap: 0.75rem; }
+  .gemini-label { font-size: 0.95rem; font-weight: 600; }
+  .gemini-status { font-size: 0.8rem; }
+  .toggle { position: relative; display: inline-block; width: 48px; height: 26px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #475569; border-radius: 26px; transition: 0.3s; }
+  .toggle-slider:before { content: ""; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+  .toggle input:checked + .toggle-slider { background: #059669; }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(22px); }
+  .toggle input:disabled + .toggle-slider { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -324,6 +335,18 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
     <thead><tr><th>ID</th><th>Name</th><th>Group</th><th>Prefix</th><th>Enabled</th></tr></thead>
     <tbody id="threads-body"><tr><td colspan="5" style="color:#64748b">Loading...</td></tr></tbody>
   </table>
+
+  <h2>&#x1F916; Gemini AI</h2>
+  <div class="gemini-card">
+    <div class="gemini-info">
+      <span class="gemini-label">Gemini AI</span>
+      <span class="gemini-status" id="gemini-status" style="color:#64748b">Loading...</span>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="gemini-toggle" onchange="toggleGemini(this.checked)">
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
 
   <h2>&#x2699;&#xFE0F; Environment Settings</h2>
   <div class="env-form" id="env-form">
@@ -473,6 +496,13 @@ async function loadEnv() {
       return;
     }
     var SECRET_KEYS = ['GEMINI_API_KEY'];
+    // Update Gemini toggle based on env value
+    var toggle = document.getElementById('gemini-toggle');
+    var statusEl = document.getElementById('gemini-status');
+    var geminiEnabled = data.env.GEMINI_ENABLED !== 'false' && data.env.GEMINI_ENABLED !== '0';
+    toggle.checked = geminiEnabled;
+    statusEl.textContent = geminiEnabled ? 'Enabled' : 'Disabled';
+    statusEl.style.color = geminiEnabled ? '#4ade80' : '#f87171';
     form.innerHTML = Object.keys(data.env).map(function(key) {
       var inputType = SECRET_KEYS.indexOf(key) >= 0 ? 'password' : 'text';
       return '<div class="env-row">' +
@@ -483,6 +513,32 @@ async function loadEnv() {
     }).join('');
     document.getElementById('env-status').textContent = '';
   } catch (e) { showError('Failed to load env: ' + e.message); }
+}
+
+async function toggleGemini(enabled) {
+  var toggle = document.getElementById('gemini-toggle');
+  var statusEl = document.getElementById('gemini-status');
+  toggle.disabled = true;
+  statusEl.textContent = 'Saving...';
+  statusEl.style.color = '#94a3b8';
+  try {
+    var res = await fetch(API + '/api/env', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ GEMINI_ENABLED: enabled ? 'true' : 'false' })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update');
+    statusEl.textContent = enabled ? 'Enabled' : 'Disabled';
+    statusEl.style.color = enabled ? '#4ade80' : '#f87171';
+    // Sync the env form input if it exists
+    var envInput = document.getElementById('env-GEMINI_ENABLED');
+    if (envInput) envInput.value = enabled ? 'true' : 'false';
+  } catch (e) {
+    toggle.checked = !enabled;
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = '#f87171';
+  } finally { toggle.disabled = false; }
 }
 
 async function saveEnv() {
