@@ -57,13 +57,18 @@ export class ContextLoader {
         }
 
         this.#metrics.inc('context_loader.cache_miss');
-        const context = this.#loadFromDb(threadId, currentText, senderId);
 
-        // Cache the result (without the current appended message)
+        // Load base context (without current message) for caching
+        const baseContext = this.#loadFromDb(threadId);
         this.#cache.set(threadId, {
-            context: this.#loadFromDb(threadId),
+            context: baseContext,
             loadedAt: Date.now(),
         });
+
+        // Append current message if provided
+        const context = currentText
+            ? this.#appendCurrent(baseContext, currentText, senderId)
+            : baseContext;
 
         this.#metrics.gauge('context_window_size', context.messageCount);
         return context;

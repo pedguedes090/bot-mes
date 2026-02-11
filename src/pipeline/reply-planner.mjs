@@ -58,10 +58,7 @@ export class ReplyPlanner {
      */
     #determineAction(analysis) {
         if (analysis.intent === 'greeting') return 'greet';
-        if (analysis.intent === 'question') {
-            if (analysis.unresolvedItems.length > 0) return 'answer_question';
-            return 'answer_question';
-        }
+        if (analysis.intent === 'question') return 'answer_question';
         if (analysis.unresolvedItems.length > 0) return 'clarify_missing_info';
         if (analysis.questionsAsked.length > 0) return 'answer_question';
         if (analysis.decisionsMade.length > 0) return 'propose_next_step';

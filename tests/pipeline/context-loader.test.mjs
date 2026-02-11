@@ -87,7 +87,8 @@ describe('ContextLoader', () => {
         const loader = new ContextLoader(db, createLogger(), createMetrics(), { maxMessages: 100 });
         loader.load('thread-123');
 
-        assert.strictEqual(db.getMessages.mock.callCount(), 2); // initial load + cache store
+        // Single DB call for base context (cached), not duplicated
+        assert.strictEqual(db.getMessages.mock.callCount(), 1);
         assert.strictEqual(db.getMessages.mock.calls[0].arguments[1], 100);
     });
 });
