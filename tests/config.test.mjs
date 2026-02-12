@@ -26,7 +26,7 @@ describe('loadConfig', () => {
         assert.strictEqual(cfg.cookies.xs, 'test_xs');
         assert.strictEqual(cfg.logLevel, 'info');
         assert.strictEqual(cfg.enableE2EE, true);
-        assert.strictEqual(cfg.maxConcurrentHandlers, 10);
+        assert.strictEqual(cfg.maxConcurrentHandlers, 50);
         assert.strictEqual(cfg.handlerTimeoutMs, 30_000);
         assert.strictEqual(cfg.sendRatePerSec, 5);
         assert.strictEqual(cfg.metricsPort, 9090);

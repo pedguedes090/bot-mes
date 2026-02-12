@@ -102,7 +102,7 @@ export function loadConfig() {
         logLevel: env('LOG_LEVEL', 'info'),
         enableE2EE: envBool('ENABLE_E2EE', true),
         autoReconnect: envBool('AUTO_RECONNECT', true),
-        maxConcurrentHandlers: envInt('MAX_CONCURRENT_HANDLERS', 10),
+        maxConcurrentHandlers: envInt('MAX_CONCURRENT_HANDLERS', 50),
         handlerTimeoutMs: envInt('HANDLER_TIMEOUT_MS', 30_000),
         sendRatePerSec: envInt('SEND_RATE_PER_SEC', 5),
         idempotencyCacheSize: envInt('IDEMPOTENCY_CACHE_SIZE', 1000),

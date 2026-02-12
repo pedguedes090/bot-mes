@@ -1,14 +1,10 @@
 // ContextLoader — fetches and formats conversation history for a thread
-// Loads 30–50 messages depending on availability, with an in-memory cache.
-
-import v8 from 'node:v8';
+// Loads 30–200 messages depending on availability, with an in-memory cache.
 
 const DEFAULT_MIN_MESSAGES = 30;
-const DEFAULT_MAX_MESSAGES = 50;
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3-minute TTL
-const MAX_CACHE_ENTRIES = 15; // Limit cache size to prevent unbounded growth
-const MEMORY_PRESSURE_RATIO = 0.65; // Clear cache when heap exceeds 65% of V8 heap limit
-const MEMORY_PRESSURE_COOLDOWN_MS = 15_000; // Minimum interval between pressure clears
+const DEFAULT_MAX_MESSAGES = 200;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10-minute TTL
+const MAX_CACHE_ENTRIES = 100; // Allow more cache entries for better hit rate
 
 /**
  * @typedef {Object} LoadedContext
@@ -25,7 +21,6 @@ export class ContextLoader {
     #cache = new Map();
     #maxMessages;
     #minMessages;
-    #lastPressureClearAt = 0;
 
     /**
      * @param {Object} db - Database instance
@@ -63,14 +58,6 @@ export class ContextLoader {
         }
 
         this.#metrics.inc('context_loader.cache_miss');
-
-        // Under memory pressure (with cooldown), clear the entire cache to help GC
-        if (this.#isMemoryPressure() && (Date.now() - this.#lastPressureClearAt) >= MEMORY_PRESSURE_COOLDOWN_MS) {
-            this.#cache.clear();
-            this.#lastPressureClearAt = Date.now();
-            this.#logger.debug('Context cache cleared due to memory pressure');
-            this.#metrics.inc('context_loader.memory_pressure_clear');
-        }
 
         // Evict stale entries to prevent unbounded memory growth
         this.#evictStale();
@@ -112,18 +99,6 @@ export class ContextLoader {
      */
     destroy() {
         this.#cache.clear();
-    }
-
-    /**
-     * Check if the process is under memory pressure.
-     * Compares heapUsed against the V8 heap_size_limit (the actual
-     * --max-old-space-size ceiling) rather than heapTotal, which grows
-     * dynamically and can mask real pressure until it's too late.
-     */
-    #isMemoryPressure() {
-        const mem = process.memoryUsage();
-        const { heap_size_limit } = v8.getHeapStatistics();
-        return mem.heapUsed > MEMORY_PRESSURE_RATIO * heap_size_limit;
     }
 
     /**
@@ -217,4 +192,4 @@ export class ContextLoader {
     }
 }
 
-export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES, MEMORY_PRESSURE_RATIO, MEMORY_PRESSURE_COOLDOWN_MS };
+export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES };
