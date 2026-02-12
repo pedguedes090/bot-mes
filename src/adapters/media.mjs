@@ -133,7 +133,20 @@ export async function getFacebookVideo(videoUrl) {
         throw new Error(`Facebook HTTP ${res.status}`);
     }
 
-    let data = await res.text();
+    // Stream the response with a size cap to prevent huge HTML pages from consuming heap
+    const MAX_HTML_BYTES = 5 * 1024 * 1024; // 5 MB cap for HTML parsing
+    const chunks = [];
+    let totalBytes = 0;
+    for await (const chunk of res.body) {
+        totalBytes += chunk.byteLength;
+        if (totalBytes > MAX_HTML_BYTES) {
+            await res.body.cancel();
+            break;
+        }
+        chunks.push(chunk);
+    }
+    let data = Buffer.concat(chunks).toString('utf-8');
+    chunks.length = 0; // Release chunk references
     data = data.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
     const parseStr = (s) => JSON.parse(`{"text":"${s}"}`).text;
@@ -240,19 +253,17 @@ export async function downloadBuffer(url, maxSizeMB = 25) {
         if (totalBytes > maxBytes) {
             // Cancel remaining stream and reject
             await res.body.cancel();
+            chunks.length = 0; // Release chunk references immediately
             throw new Error(`File too large after download`);
         }
         chunks.push(chunk);
     }
 
     const contentType = res.headers.get('content-type') || '';
-    const combined = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-        combined.set(chunk, offset);
-        offset += chunk.byteLength;
-    }
-    return { buffer: Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength), contentType };
+    // Combine chunks into a single Buffer, then release the chunks array
+    const buffer = Buffer.concat(chunks, totalBytes);
+    chunks.length = 0; // Release chunk references so GC can reclaim them
+    return { buffer, contentType };
 }
 
 // --- Douyin ---

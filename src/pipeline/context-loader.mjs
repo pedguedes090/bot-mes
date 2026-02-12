@@ -1,12 +1,12 @@
 // ContextLoader — fetches and formats conversation history for a thread
-// Loads 30–200 messages depending on availability, with an in-memory cache.
+// Loads 30–50 messages depending on availability, with an in-memory cache.
 
 const DEFAULT_MIN_MESSAGES = 30;
 const DEFAULT_MAX_MESSAGES = 50;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5-minute TTL
-const MAX_CACHE_ENTRIES = 20; // Limit cache size to prevent unbounded growth
-const MEMORY_PRESSURE_RATIO = 0.75; // Clear cache when heap exceeds 75% of allocated heap
-const MEMORY_PRESSURE_COOLDOWN_MS = 30_000; // Minimum interval between pressure clears
+const CACHE_TTL_MS = 3 * 60 * 1000; // 3-minute TTL
+const MAX_CACHE_ENTRIES = 15; // Limit cache size to prevent unbounded growth
+const MEMORY_PRESSURE_RATIO = 0.65; // Clear cache when heap exceeds 65% of allocated heap
+const MEMORY_PRESSURE_COOLDOWN_MS = 15_000; // Minimum interval between pressure clears
 
 /**
  * @typedef {Object} LoadedContext
@@ -151,11 +151,9 @@ export class ContextLoader {
     /**
      * Load messages from the database.
      * @param {string} threadId
-     * @param {string} [currentText]
-     * @param {string} [senderId]
      * @returns {LoadedContext}
      */
-    #loadFromDb(threadId, currentText, senderId) {
+    #loadFromDb(threadId) {
         const messages = [];
 
         if (this.#db && threadId) {
@@ -177,15 +175,6 @@ export class ContextLoader {
             }
         }
 
-        // Append current message
-        if (currentText) {
-            messages.push({
-                senderId: senderId || 'user',
-                text: currentText,
-                timestamp: Date.now(),
-            });
-        }
-
         const formatted = messages
             .map(m => `[${m.senderId}]: ${m.text}`)
             .join('\n');
@@ -205,20 +194,21 @@ export class ContextLoader {
 
     /**
      * Append current message to an existing context.
+     * Avoids spreading the full messages array; reuses the cached formatted string.
      */
     #appendCurrent(context, currentText, senderId) {
-        const newMessages = [
-            ...context.messages,
-            { senderId: senderId || 'user', text: currentText, timestamp: Date.now() },
-        ];
-        const formatted = newMessages
-            .map(m => `[${m.senderId}]: ${m.text}`)
-            .join('\n');
+        const currentMsg = { senderId: senderId || 'user', text: currentText, timestamp: Date.now() };
+        const currentLine = `[${currentMsg.senderId}]: ${currentMsg.text}`;
+
+        // Append to the formatted string instead of rebuilding from scratch
+        const formatted = context.formatted
+            ? context.formatted + '\n' + currentLine
+            : currentLine;
 
         return {
             threadId: context.threadId,
-            messages: newMessages,
-            messageCount: newMessages.length,
+            messages: context.messages.concat(currentMsg),
+            messageCount: context.messageCount + 1,
             formatted,
         };
     }

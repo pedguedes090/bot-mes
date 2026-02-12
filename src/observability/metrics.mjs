@@ -78,17 +78,17 @@ export class Metrics {
         }, 5 * 60 * 1000);
         this.#memoryTimer.unref();
 
-        // Periodic idle memory reclamation (every 60s)
+        // Periodic idle memory reclamation (every 30s)
         if (typeof global.gc === 'function') {
             this.#gcTimer = setInterval(() => {
                 const active = this.#gauges.get('handlers.active') ?? 0;
                 const mem = process.memoryUsage();
-                const heapPressure = mem.heapUsed > 0.75 * mem.heapTotal;
+                const heapPressure = mem.heapUsed > 0.65 * mem.heapTotal;
                 if (active === 0 || heapPressure) {
                     global.gc();
                     logger?.debug('GC triggered', { idle: active === 0, heapPressure });
                 }
-            }, 60_000);
+            }, 30_000);
             this.#gcTimer.unref();
         }
     }
