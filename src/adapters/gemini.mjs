@@ -190,6 +190,8 @@ export class GeminiAdapter {
             this.#logger.debug('Gemini API response', { model, latencyMs, status: response.status });
 
             if (response.status === 503 || response.status === 429) {
+                // Drain response body to free native memory before retry
+                await response.body?.cancel();
                 if (attempt < maxRetries) {
                     const delayMs = 1000 * 2 ** attempt;
                     this.#logger.warn('Gemini API transient error, retrying', { status: response.status, attempt, delayMs });

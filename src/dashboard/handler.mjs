@@ -129,6 +129,7 @@ function handleOverview(res, db, metrics) {
       rss: snapshot.memory_rss || 0,
       heap_used: snapshot.memory_heap_used || 0,
       heap_total: snapshot.memory_heap_total || 0,
+      heap_limit: snapshot.memory_heap_limit || 0,
       external: snapshot.memory_external || 0,
     },
     database: dbStats,
