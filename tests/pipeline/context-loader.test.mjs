@@ -80,7 +80,7 @@ describe('ContextLoader', () => {
     it('exports correct default constants', () => {
         assert.strictEqual(DEFAULT_MIN_MESSAGES, 30);
         assert.strictEqual(DEFAULT_MAX_MESSAGES, 50);
-        assert.strictEqual(MAX_CACHE_ENTRIES, 20);
+        assert.strictEqual(MAX_CACHE_ENTRIES, 15);
     });
 
     it('evicts stale cache entries on cache miss', () => {

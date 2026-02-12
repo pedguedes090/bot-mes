@@ -62,6 +62,7 @@ async function sendBatch(items, msg, adapter) {
     for (let i = 0; i < items.length; i++) {
         try {
             const item = items[i];
+            items[i] = null; // Release reference so GC can reclaim API response data
             const { buffer, contentType } = await downloadBuffer(item.url);
             const isVideo = item.type === 'video' || contentType.includes('video');
             const ext = isVideo ? 'mp4' : (contentType.includes('png') ? 'png' : 'jpg');
