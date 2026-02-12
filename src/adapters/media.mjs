@@ -145,7 +145,7 @@ export async function getFacebookVideo(videoUrl) {
         }
         chunks.push(chunk);
     }
-    let data = Buffer.concat(chunks, Math.min(totalBytes, MAX_HTML_BYTES)).toString('utf-8');
+    let data = Buffer.concat(chunks).toString('utf-8');
     chunks.length = 0; // Release chunk references
     data = data.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
