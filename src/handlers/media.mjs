@@ -1,11 +1,12 @@
 // Handler: detect Facebook/Instagram/TikTok links → download media → send
 // Silent on errors — if anything fails, just do nothing
-import { getInstagramMedia, getFacebookVideo, getTikTokMedia, downloadBuffer } from '../adapters/media.mjs';
+import { getInstagramMedia, getFacebookVideo, getTikTokMedia, getDouyinMedia, downloadBuffer } from '../adapters/media.mjs';
 
 const IG_REGEX = /https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/(p|reel|tv|reels|share)\/[^\s]+/i;
 const FB_REGEX = /https?:\/\/(?:www\.)?(?:facebook\.com|fb\.watch|fb\.com|m\.facebook\.com)\/[^\s]*(?:video|watch|reel|share|story)[^\s]*/i;
 const FB_SIMPLE = /https?:\/\/(?:www\.)?(?:facebook\.com|fb\.watch|fb\.com|m\.facebook\.com)\/[^\s]+/i;
 const TT_REGEX = /https?:\/\/(?:(?:www|vt|vm)\.)?tiktok\.com\/[^\s]+/i;
+const DY_REGEX = /https?:\/\/(?:www\.|v\.|ies)?douyin\.com\/[^\s]+/i;
 
 export const MediaHandler = {
     name: 'media-download',
@@ -13,7 +14,7 @@ export const MediaHandler = {
     match(eventType, msg) {
         const text = msg.text?.trim();
         if (!text) return false;
-        return IG_REGEX.test(text) || FB_REGEX.test(text) || FB_SIMPLE.test(text) || TT_REGEX.test(text);
+        return IG_REGEX.test(text) || FB_REGEX.test(text) || FB_SIMPLE.test(text) || TT_REGEX.test(text) || DY_REGEX.test(text);
     },
 
     async handle(eventType, msg, adapter) {
@@ -31,6 +32,13 @@ export const MediaHandler = {
             const ttMatch = text.match(TT_REGEX);
             if (ttMatch) {
                 await sendBatch(await getTikTokMedia(ttMatch[0]), msg, adapter);
+                return;
+            }
+
+            // Douyin
+            const dyMatch = text.match(DY_REGEX);
+            if (dyMatch) {
+                await sendBatch(await getDouyinMedia(dyMatch[0]), msg, adapter);
                 return;
             }
 

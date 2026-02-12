@@ -254,3 +254,28 @@ export async function downloadBuffer(url, maxSizeMB = 25) {
     }
     return { buffer: Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength), contentType };
 }
+
+// --- Douyin ---
+
+export async function getDouyinMedia(url) {
+    const apiUrl = `https://douyin.cuong.one/api/douyin/detail?url=${encodeURIComponent(url)}`;
+    
+    const res = await fetch(apiUrl, {
+        headers: { 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    
+    if (!res.ok) {
+        await res.body?.cancel();
+        throw new Error(`Douyin API HTTP ${res.status}`);
+    }
+
+    const json = await res.json();
+    if (json.status !== 'ok' || !json.video) {
+        throw new Error(json.message || 'Douyin video not found');
+    }
+
+    // The API returns a direct video URL in the `video` field
+    // It redirects to the actual video file, so our downloadBuffer will handle it
+    return [{ type: 'video', url: json.video }];
+}
