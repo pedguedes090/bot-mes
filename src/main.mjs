@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { loadConfig } from './config/index.mjs';
 import { Logger } from './observability/logger.mjs';
 import { Metrics } from './observability/metrics.mjs';
@@ -73,6 +74,18 @@ async function shutdown(signal) {
     }
 
     logger.info('Shutdown complete');
+
+    if (signal === 'auto-restart') {
+        logger.info('Spawning new process for auto-restart');
+        const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
+            cwd: process.cwd(),
+            stdio: 'inherit',
+            detached: true,
+            env: process.env,
+        });
+        child.unref();
+    }
+
     process.exit(0);
 }
 
