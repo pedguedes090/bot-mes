@@ -24,8 +24,13 @@ export class BotCore {
     }
 
     start() {
-        this.#adapter.on('message', (msg) => this.#dispatch('message', msg));
-        this.#adapter.on('e2eeMessage', (msg) => this.#dispatch('e2eeMessage', msg));
+        this.#adapter.on('message', (msg) => {
+            // Schedule dispatch asynchronously so concurrent messages don't block each other
+            setImmediate(() => this.#dispatch('message', msg));
+        });
+        this.#adapter.on('e2eeMessage', (msg) => {
+            setImmediate(() => this.#dispatch('e2eeMessage', msg));
+        });
         this.#logger.info('Bot core started', {
             handlers: this.#handlers.map(h => h.name),
             maxConcurrent: this.#config.maxConcurrentHandlers,

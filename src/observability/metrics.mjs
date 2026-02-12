@@ -1,5 +1,4 @@
 import { createServer } from 'node:http';
-import v8 from 'node:v8';
 
 export class Metrics {
     #counters = new Map();
@@ -7,7 +6,6 @@ export class Metrics {
     #server = null;
     #startTime = Date.now();
     #dashboardHandler = null;
-    #gcTimer = null;
     #memoryTimer = null;
 
     inc(name, delta = 1) {
@@ -33,7 +31,6 @@ export class Metrics {
         out.memory_heap_used = mem.heapUsed;
         out.memory_heap_total = mem.heapTotal;
         out.memory_external = mem.external;
-        out.memory_heap_limit = v8.getHeapStatistics().heap_size_limit;
         return out;
     }
 
@@ -79,31 +76,12 @@ export class Metrics {
             logger?.debug('Memory stats', { rss_mb: rssMB, heap_mb: heapMB });
         }, 5 * 60 * 1000);
         this.#memoryTimer.unref();
-
-        // Periodic idle memory reclamation (every 30s)
-        if (typeof global.gc === 'function') {
-            this.#gcTimer = setInterval(() => {
-                const active = this.#gauges.get('handlers.active') ?? 0;
-                const mem = process.memoryUsage();
-                const { heap_size_limit } = v8.getHeapStatistics();
-                const heapPressure = mem.heapUsed > 0.65 * heap_size_limit;
-                if (active === 0 || heapPressure) {
-                    global.gc();
-                    logger?.debug('GC triggered', { idle: active === 0, heapPressure });
-                }
-            }, 30_000);
-            this.#gcTimer.unref();
-        }
     }
 
     async stop() {
         if (this.#memoryTimer) {
             clearInterval(this.#memoryTimer);
             this.#memoryTimer = null;
-        }
-        if (this.#gcTimer) {
-            clearInterval(this.#gcTimer);
-            this.#gcTimer = null;
         }
         if (this.#server) {
             return new Promise(resolve => this.#server.close(resolve));
