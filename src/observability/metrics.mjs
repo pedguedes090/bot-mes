@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import v8 from 'node:v8';
 
 export class Metrics {
     #counters = new Map();
@@ -32,6 +33,7 @@ export class Metrics {
         out.memory_heap_used = mem.heapUsed;
         out.memory_heap_total = mem.heapTotal;
         out.memory_external = mem.external;
+        out.memory_heap_limit = v8.getHeapStatistics().heap_size_limit;
         return out;
     }
 
@@ -83,7 +85,8 @@ export class Metrics {
             this.#gcTimer = setInterval(() => {
                 const active = this.#gauges.get('handlers.active') ?? 0;
                 const mem = process.memoryUsage();
-                const heapPressure = mem.heapUsed > 0.65 * mem.heapTotal;
+                const { heap_size_limit } = v8.getHeapStatistics();
+                const heapPressure = mem.heapUsed > 0.65 * heap_size_limit;
                 if (active === 0 || heapPressure) {
                     global.gc();
                     logger?.debug('GC triggered', { idle: active === 0, heapPressure });

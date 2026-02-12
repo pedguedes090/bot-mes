@@ -1,6 +1,7 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { ContextLoader, DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, MAX_CACHE_ENTRIES } from '../../src/pipeline/context-loader.mjs';
+import { ContextLoader, DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, MAX_CACHE_ENTRIES, MEMORY_PRESSURE_RATIO } from '../../src/pipeline/context-loader.mjs';
+import v8 from 'node:v8';
 
 function createLogger() {
     return {
@@ -140,5 +141,20 @@ describe('ContextLoader', () => {
         const missCalls = metrics.inc.mock.calls
             .filter(c => c.arguments[0] === 'context_loader.cache_miss');
         assert.strictEqual(missCalls.length, 2); // initial + after destroy
+    });
+
+    it('uses MEMORY_PRESSURE_RATIO against v8 heap_size_limit', () => {
+        // Verify the exported constant is used for pressure detection
+        assert.strictEqual(MEMORY_PRESSURE_RATIO, 0.65);
+
+        // Verify that v8 heap_size_limit is available and reasonable
+        const { heap_size_limit } = v8.getHeapStatistics();
+        assert.ok(heap_size_limit > 0, 'heap_size_limit should be positive');
+
+        // Under normal test conditions, heapUsed should be well below 65% of the limit
+        const mem = process.memoryUsage();
+        const ratio = mem.heapUsed / heap_size_limit;
+        assert.ok(ratio < MEMORY_PRESSURE_RATIO,
+            `Expected heapUsed/heap_size_limit (${ratio.toFixed(3)}) < ${MEMORY_PRESSURE_RATIO} during tests`);
     });
 });

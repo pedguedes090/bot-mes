@@ -1,5 +1,6 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import v8 from 'node:v8';
 import { Metrics } from '../src/observability/metrics.mjs';
 import { createCommandHandler } from '../src/handlers/command.mjs';
 import { CommandRegistry } from '../src/commands/registry.mjs';
@@ -14,6 +15,14 @@ describe('Metrics memory reporting', () => {
         assert.ok(typeof snap.memory_heap_used === 'number');
         assert.ok(typeof snap.memory_heap_total === 'number');
         assert.ok(typeof snap.memory_external === 'number');
+    });
+
+    it('snapshot includes heap_size_limit from v8', () => {
+        const m = new Metrics();
+        const snap = m.snapshot();
+        assert.ok(typeof snap.memory_heap_limit === 'number');
+        assert.ok(snap.memory_heap_limit > 0);
+        assert.strictEqual(snap.memory_heap_limit, v8.getHeapStatistics().heap_size_limit);
     });
 
     it('stop cleans up without error when no server started', async () => {

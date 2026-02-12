@@ -1,11 +1,13 @@
 // ContextLoader — fetches and formats conversation history for a thread
 // Loads 30–50 messages depending on availability, with an in-memory cache.
 
+import v8 from 'node:v8';
+
 const DEFAULT_MIN_MESSAGES = 30;
 const DEFAULT_MAX_MESSAGES = 50;
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3-minute TTL
 const MAX_CACHE_ENTRIES = 15; // Limit cache size to prevent unbounded growth
-const MEMORY_PRESSURE_RATIO = 0.65; // Clear cache when heap exceeds 65% of allocated heap
+const MEMORY_PRESSURE_RATIO = 0.65; // Clear cache when heap exceeds 65% of V8 heap limit
 const MEMORY_PRESSURE_COOLDOWN_MS = 15_000; // Minimum interval between pressure clears
 
 /**
@@ -114,13 +116,14 @@ export class ContextLoader {
 
     /**
      * Check if the process is under memory pressure.
-     * Compares heapUsed against heapTotal (currently allocated heap, not the
-     * --max-old-space-size ceiling). When the ratio is high, V8 is close to
-     * requesting more memory from the OS or hitting the configured limit.
+     * Compares heapUsed against the V8 heap_size_limit (the actual
+     * --max-old-space-size ceiling) rather than heapTotal, which grows
+     * dynamically and can mask real pressure until it's too late.
      */
     #isMemoryPressure() {
         const mem = process.memoryUsage();
-        return mem.heapUsed > MEMORY_PRESSURE_RATIO * mem.heapTotal;
+        const { heap_size_limit } = v8.getHeapStatistics();
+        return mem.heapUsed > MEMORY_PRESSURE_RATIO * heap_size_limit;
     }
 
     /**
