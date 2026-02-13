@@ -1,6 +1,6 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { ContextLoader, DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, MAX_CACHE_ENTRIES } from '../../src/pipeline/context-loader.mjs';
+import { ContextLoader, DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, MAX_CACHE_ENTRIES, EVICTION_INTERVAL_MS } from '../../src/pipeline/context-loader.mjs';
 
 function createLogger() {
     return {
@@ -81,6 +81,7 @@ describe('ContextLoader', () => {
         assert.strictEqual(DEFAULT_MIN_MESSAGES, 30);
         assert.strictEqual(DEFAULT_MAX_MESSAGES, 200);
         assert.strictEqual(MAX_CACHE_ENTRIES, 100);
+        assert.strictEqual(EVICTION_INTERVAL_MS, 60_000);
     });
 
     it('evicts stale cache entries on cache miss', () => {
@@ -128,7 +129,7 @@ describe('ContextLoader', () => {
         assert.strictEqual(db.getMessages.mock.calls[0].arguments[1], 100);
     });
 
-    it('destroy clears cache', () => {
+    it('destroy clears cache and stops eviction timer', () => {
         const db = createMockDb([{ sender_id: 'user1', text: 'test', timestamp: 1000 }]);
         const metrics = createMetrics();
         const loader = new ContextLoader(db, createLogger(), metrics);
@@ -140,5 +141,8 @@ describe('ContextLoader', () => {
         const missCalls = metrics.inc.mock.calls
             .filter(c => c.arguments[0] === 'context_loader.cache_miss');
         assert.strictEqual(missCalls.length, 2); // initial + after destroy
+
+        // Calling destroy again should not throw (timer already cleared)
+        loader.destroy();
     });
 });

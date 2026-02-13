@@ -31,7 +31,7 @@ export function createChatHandler(gemini, db, metrics, logger) {
     const messageComposer = new MessageComposer(gemini, log, metrics);
     const safetyGate = new SafetyGate(log, metrics);
 
-    return {
+    const handler = {
         name: 'ai-chat',
 
         match(_eventType, msg) {
@@ -118,7 +118,24 @@ export function createChatHandler(gemini, db, metrics, logger) {
             // Invalidate context cache after sending (context changed)
             contextLoader.invalidate(targetThreadId);
         },
+
+        /** Clear the in-memory context cache (e.g. under memory pressure). */
+        clearCache() {
+            contextLoader.clearCache();
+        },
+
+        /** Destroy the loader and release resources during shutdown. */
+        destroy() {
+            contextLoader.destroy();
+        },
     };
+
+    // Register for memory pressure notifications to shed cache
+    if (metrics.onMemoryPressure) {
+        metrics.onMemoryPressure(() => handler.clearCache());
+    }
+
+    return handler;
 }
 
 /**

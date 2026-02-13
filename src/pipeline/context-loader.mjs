@@ -5,6 +5,7 @@ const DEFAULT_MIN_MESSAGES = 30;
 const DEFAULT_MAX_MESSAGES = 200;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10-minute TTL
 const MAX_CACHE_ENTRIES = 100; // Allow more cache entries for better hit rate
+const EVICTION_INTERVAL_MS = 60 * 1000; // Run eviction every 60 seconds
 
 /**
  * @typedef {Object} LoadedContext
@@ -21,6 +22,7 @@ export class ContextLoader {
     #cache = new Map();
     #maxMessages;
     #minMessages;
+    #evictionTimer = null;
 
     /**
      * @param {Object} db - Database instance
@@ -36,6 +38,9 @@ export class ContextLoader {
         this.#metrics = metrics;
         this.#minMessages = options.minMessages ?? DEFAULT_MIN_MESSAGES;
         this.#maxMessages = options.maxMessages ?? DEFAULT_MAX_MESSAGES;
+        // Periodically evict stale entries to prevent memory growth between cache misses
+        this.#evictionTimer = setInterval(() => this.#evictStale(), EVICTION_INTERVAL_MS);
+        this.#evictionTimer.unref();
     }
 
     /**
@@ -98,6 +103,10 @@ export class ContextLoader {
      * Call during graceful shutdown to assist garbage collection.
      */
     destroy() {
+        if (this.#evictionTimer) {
+            clearInterval(this.#evictionTimer);
+            this.#evictionTimer = null;
+        }
         this.#cache.clear();
     }
 
@@ -192,4 +201,4 @@ export class ContextLoader {
     }
 }
 
-export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES };
+export { DEFAULT_MIN_MESSAGES, DEFAULT_MAX_MESSAGES, CACHE_TTL_MS, MAX_CACHE_ENTRIES, EVICTION_INTERVAL_MS };
