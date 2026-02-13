@@ -23,9 +23,17 @@ describe('Metrics memory reporting', () => {
 
     it('stop cleans up memory timer when server was started', async () => {
         const m = new Metrics();
-        const logger = { info: () => {}, debug: () => {} };
+        const logger = { info: () => {}, debug: () => {}, warn: () => {} };
         m.startServer(0, logger);
         await m.stop(); // should clean up all timers
+    });
+
+    it('onMemoryPressure registers a callback', () => {
+        const m = new Metrics();
+        const cb = mock.fn();
+        m.onMemoryPressure(cb);
+        // Callback should not be called until pressure is detected
+        assert.strictEqual(cb.mock.callCount(), 0);
     });
 });
 

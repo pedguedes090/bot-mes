@@ -13,7 +13,7 @@ function createMockGemini({ enabled = true, shouldReply = true, needSearch = fal
 }
 
 function createMockMetrics() {
-    return { inc: mock.fn(), gauge: mock.fn() };
+    return { inc: mock.fn(), gauge: mock.fn(), onMemoryPressure: mock.fn() };
 }
 
 function createMockDb(messages = []) {
@@ -138,5 +138,20 @@ describe('AI Chat Handler', () => {
     it('handler name is ai-chat', () => {
         const handler = createChatHandler(createMockGemini(), null, createMockMetrics());
         assert.strictEqual(handler.name, 'ai-chat');
+    });
+
+    it('exposes clearCache and destroy methods', () => {
+        const handler = createChatHandler(createMockGemini(), null, createMockMetrics());
+        assert.strictEqual(typeof handler.clearCache, 'function');
+        assert.strictEqual(typeof handler.destroy, 'function');
+        // Should not throw
+        handler.clearCache();
+        handler.destroy();
+    });
+
+    it('registers memory pressure callback with metrics', () => {
+        const metrics = createMockMetrics();
+        createChatHandler(createMockGemini(), null, metrics);
+        assert.strictEqual(metrics.onMemoryPressure.mock.callCount(), 1);
     });
 });

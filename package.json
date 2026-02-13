@@ -6,7 +6,7 @@
     "description": "Production-ready bot using meta-messenger.js",
     "main": "src/main.mjs",
     "scripts": {
-        "start": "node --experimental-sqlite src/main.mjs",
+        "start": "node --experimental-sqlite --max-old-space-size=256 src/main.mjs",
         "test": "node --test 'tests/**/*.mjs' 'tests/*.mjs'"
     },
     "engines": {

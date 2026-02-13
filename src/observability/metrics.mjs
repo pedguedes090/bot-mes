@@ -7,6 +7,7 @@ export class Metrics {
     #startTime = Date.now();
     #dashboardHandler = null;
     #memoryTimer = null;
+    #memoryPressureCallbacks = [];
 
     inc(name, delta = 1) {
         this.#counters.set(name, (this.#counters.get(name) ?? 0) + delta);
@@ -42,6 +43,14 @@ export class Metrics {
         this.#dashboardHandler = handler;
     }
 
+    /**
+     * Register a callback to be invoked when heap usage exceeds 85% of heap total.
+     * @param {() => void} callback
+     */
+    onMemoryPressure(callback) {
+        this.#memoryPressureCallbacks.push(callback);
+    }
+
     // Minimal HTTP server for /health, /metrics, /dashboard, and /api/*
     startServer(port, logger) {
         this.#server = createServer((req, res) => {
@@ -66,7 +75,7 @@ export class Metrics {
         });
         this.#server.unref(); // Don't prevent shutdown
 
-        // Periodic memory stats logging (every 5 minutes)
+        // Periodic memory stats logging and pressure detection (every 60 seconds)
         this.#memoryTimer = setInterval(() => {
             const mem = process.memoryUsage();
             const rssMB = Math.round(mem.rss / 1024 / 1024);
@@ -74,7 +83,20 @@ export class Metrics {
             this.gauge('memory.rss_mb', rssMB);
             this.gauge('memory.heap_mb', heapMB);
             logger?.debug('Memory stats', { rss_mb: rssMB, heap_mb: heapMB });
-        }, 5 * 60 * 1000);
+
+            // Trigger memory pressure callbacks when heap usage exceeds 85%
+            if (mem.heapTotal > 0 && mem.heapUsed / mem.heapTotal > 0.85) {
+                logger?.warn('Memory pressure detected', { rss_mb: rssMB, heap_mb: heapMB, heapTotal_mb: Math.round(mem.heapTotal / 1024 / 1024) });
+                this.inc('memory.pressure_events');
+                for (const cb of this.#memoryPressureCallbacks) {
+                    try { cb(); } catch { /* ignore callback errors */ }
+                }
+                // Attempt manual GC if exposed via --expose-gc
+                if (typeof globalThis.gc === 'function') {
+                    globalThis.gc();
+                }
+            }
+        }, 60_000);
         this.#memoryTimer.unref();
     }
 
