@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
 
+const MEMORY_PRESSURE_THRESHOLD = 0.85;
+
 export class Metrics {
     #counters = new Map();
     #gauges = new Map();
@@ -84,12 +86,12 @@ export class Metrics {
             this.gauge('memory.heap_mb', heapMB);
             logger?.debug('Memory stats', { rss_mb: rssMB, heap_mb: heapMB });
 
-            // Trigger memory pressure callbacks when heap usage exceeds 85%
-            if (mem.heapTotal > 0 && mem.heapUsed / mem.heapTotal > 0.85) {
+            // Trigger memory pressure callbacks when heap usage exceeds threshold
+            if (mem.heapTotal > 0 && mem.heapUsed / mem.heapTotal > MEMORY_PRESSURE_THRESHOLD) {
                 logger?.warn('Memory pressure detected', { rss_mb: rssMB, heap_mb: heapMB, heapTotal_mb: Math.round(mem.heapTotal / 1024 / 1024) });
                 this.inc('memory.pressure_events');
                 for (const cb of this.#memoryPressureCallbacks) {
-                    try { cb(); } catch { /* ignore callback errors */ }
+                    try { cb(); } catch (err) { logger?.warn('Memory pressure callback error', { error: err.message }); }
                 }
                 // Attempt manual GC if exposed via --expose-gc
                 if (typeof globalThis.gc === 'function') {
