@@ -85,19 +85,17 @@ export class Metrics {
                 // Close the server before clearing the reference to prevent resource leaks
                 const serverToClose = this.#server;
                 this.#server = null;
-                serverToClose.close(() => {
-                    // Server closed successfully
+                serverToClose.close((closeErr) => {
+                    if (closeErr) {
+                        logger?.debug('Error closing metrics server', { error: closeErr.message });
+                    }
                 });
             } else {
                 logger?.error(`Metrics server error: ${err.code || 'UNKNOWN'} - ${err.message}. The metrics server may not be available.`);
             }
         });
 
-        this.#server.listen(port, (err) => {
-            if (err) {
-                // Error already handled by error event listener
-                return;
-            }
+        this.#server.listen(port, () => {
             // Only log success if server is still valid
             if (this.#server) {
                 logger?.info(`Metrics server listening on :${port}`);
