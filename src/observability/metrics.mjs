@@ -55,6 +55,8 @@ export class Metrics {
 
     // Minimal HTTP server for /health, /metrics, /dashboard, and /api/*
     startServer(port, logger) {
+        let errorHandled = false; // Prevent multiple error handlers from executing
+
         this.#server = createServer((req, res) => {
             // Try dashboard handler first for /api/* and /dashboard routes
             if (this.#dashboardHandler && this.#dashboardHandler(req, res)) {
@@ -75,19 +77,31 @@ export class Metrics {
 
         // Handle port binding errors gracefully
         this.#server.on('error', (err) => {
+            if (errorHandled) return; // Prevent multiple error handlers
+            errorHandled = true;
+
             if (err.code === 'EADDRINUSE') {
                 logger?.warn(`Metrics server port ${port} is already in use, continuing without metrics server`);
                 // Close the server before clearing the reference to prevent resource leaks
                 const serverToClose = this.#server;
                 this.#server = null;
-                serverToClose.close();
+                serverToClose.close(() => {
+                    // Server closed successfully
+                });
             } else {
                 logger?.error(`Metrics server error: ${err.code || 'UNKNOWN'} - ${err.message}. The metrics server may not be available.`);
             }
         });
 
-        this.#server.listen(port, () => {
-            logger?.info(`Metrics server listening on :${port}`);
+        this.#server.listen(port, (err) => {
+            if (err) {
+                // Error already handled by error event listener
+                return;
+            }
+            // Only log success if server is still valid
+            if (this.#server) {
+                logger?.info(`Metrics server listening on :${port}`);
+            }
         });
         this.#server.unref(); // Don't prevent shutdown
 
