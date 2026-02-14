@@ -77,9 +77,12 @@ export class Metrics {
         this.#server.on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
                 logger?.warn(`Metrics server port ${port} is already in use, continuing without metrics server`);
+                // Close the server before clearing the reference to prevent resource leaks
+                const serverToClose = this.#server;
                 this.#server = null;
+                serverToClose.close();
             } else {
-                logger?.error('Metrics server error', { error: err.message });
+                logger?.error(`Metrics server error: ${err.code || 'UNKNOWN'} - ${err.message}. The metrics server may not be available.`);
             }
         });
 
