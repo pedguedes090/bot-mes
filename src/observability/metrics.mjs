@@ -72,6 +72,17 @@ export class Metrics {
                 res.end('Not Found');
             }
         });
+
+        // Handle port binding errors gracefully
+        this.#server.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                logger?.warn(`Metrics server port ${port} is already in use, continuing without metrics server`);
+                this.#server = null;
+            } else {
+                logger?.error('Metrics server error', { error: err.message });
+            }
+        });
+
         this.#server.listen(port, () => {
             logger?.info(`Metrics server listening on :${port}`);
         });
