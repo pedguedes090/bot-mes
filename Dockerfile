@@ -17,4 +17,4 @@ USER bot
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
     CMD node -e "fetch('http://localhost:9090/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
-CMD ["node", "--experimental-sqlite", "--max-old-space-size=500", "src/main.mjs"]
+CMD ["node", "--experimental-sqlite", "--max-old-space-size=1024", "src/main.mjs"]
